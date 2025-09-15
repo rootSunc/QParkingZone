@@ -16,6 +16,8 @@ use Slim\Factory\AppFactory as SlimAppFactory;
 
 final class ApplicationFactory
 {
+    private const MAX_PAGE_SIZE = 100;
+
     public static function create(?PDO $pdo = null, ?AppConfig $config = null): App
     {
         $config ??= AppConfig::fromEnvironment();
@@ -32,15 +34,20 @@ final class ApplicationFactory
         );
 
         $app->get('/api/zones', function (Request $request, Response $response) use ($repository, $responder): Response {
-            $city = $request->getQueryParams()['city'] ?? null;
+            $queryParams = $request->getQueryParams();
 
-            if (!is_string($city) || $city === '') {
-                $city = null;
-            } else {
-                $city = strtolower($city);
-            }
-
-            return $responder->respond($response, $repository->fetchAllSummaries($city));
+            return $responder->respond(
+                $response,
+                $repository->fetchAllSummaries(
+                    self::readNormalizedString($queryParams['city'] ?? null),
+                    self::readNormalizedString($queryParams['q'] ?? null),
+                    self::readNormalizedString($queryParams['type'] ?? null),
+                    self::readNormalizedString($queryParams['status'] ?? null),
+                    self::readSummarySort($queryParams['sort'] ?? null),
+                    self::readPositiveInteger($queryParams['page'] ?? null, 1),
+                    self::readPositiveInteger($queryParams['limit'] ?? null, 20, self::MAX_PAGE_SIZE)
+                )
+            );
         });
 
         $app->get('/api/zones/{id}', function (Request $request, Response $response, array $args) use ($repository, $responder): Response {
@@ -54,5 +61,47 @@ final class ApplicationFactory
         });
 
         return $app;
+    }
+
+    private static function readNormalizedString(mixed $value): ?string
+    {
+        if (!is_string($value)) {
+            return null;
+        }
+
+        $normalized = strtolower(trim($value));
+
+        return $normalized === '' ? null : $normalized;
+    }
+
+    private static function readSummarySort(mixed $value): string
+    {
+        if (!is_string($value)) {
+            return 'name';
+        }
+
+        return match (trim($value)) {
+            'price_asc', 'price_desc', 'name' => trim($value),
+            default => 'name',
+        };
+    }
+
+    private static function readPositiveInteger(mixed $value, int $default, ?int $maximum = null): int
+    {
+        if (!is_string($value) && !is_int($value)) {
+            return $default;
+        }
+
+        $normalized = (int) $value;
+
+        if ($normalized < 1) {
+            return $default;
+        }
+
+        if ($maximum !== null && $normalized > $maximum) {
+            return $maximum;
+        }
+
+        return $normalized;
     }
 }

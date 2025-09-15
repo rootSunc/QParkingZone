@@ -1,40 +1,89 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import { fetchZones, type ZoneSummary } from '@/api/zones'
+import { computed, onUnmounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { fetchZones, type ZonesPage } from '@/api/zones'
 import { useCitySelection } from '@/composables/useCitySelection'
+import {
+  defaultZonePageSize,
+  parseZoneCatalogQuery,
+  updateZoneCatalogQuery,
+  type ZoneCatalogQueryState,
+  type ZoneSort,
+} from '@/composables/useZoneCatalogRoute'
 import ZoneCard from '@/components/ZoneCard.vue'
 
-const zones = ref<ZoneSummary[]>([])
+const route = useRoute()
+const router = useRouter()
+const pageData = ref<ZonesPage>({
+  items: [],
+  total: 0,
+  page: 1,
+  limit: defaultZonePageSize,
+})
 const loading = ref(false)
 const error = ref('')
-const query = ref('')
-const sortBy = ref<'name' | 'price'>('name')
-const typeFilter = ref<string | null>(null)
-const { selectedCity, selectedCityLabel } = useCitySelection()
+const { selectedCityLabel } = useCitySelection(() => route.query)
+const catalogState = computed(() => parseZoneCatalogQuery(route.query))
+let activeRequestId = 0
+let activeController: AbortController | null = null
+
+const zones = computed(() => {
+  return pageData.value.items
+})
 
 const availableTypes = computed(() => {
   return [...new Set(zones.value.map((zone) => zone.type))]
 })
 
-const visibleZones = computed(() => {
-  const filtered = zones.value.filter((zone) => {
-    const matchesQuery = zone.name.toLowerCase().includes(query.value.toLowerCase())
-    const matchesType = typeFilter.value === null || zone.type === typeFilter.value
+const searchQuery = computed({
+  get() {
+    return catalogState.value.q
+  },
+  set(value: string) {
+    replaceCatalogQuery({
+      q: value,
+      page: 1,
+    })
+  },
+})
 
-    return matchesQuery && matchesType
-  })
+const sortBy = computed<ZoneSort>({
+  get() {
+    return catalogState.value.sort
+  },
+  set(value) {
+    replaceCatalogQuery({
+      sort: value,
+      page: 1,
+    })
+  },
+})
 
-  return filtered.sort((a, b) => {
-    if (sortBy.value === 'price') {
-      return b.hourlyRateEur - a.hourlyRateEur
-    }
-
-    return a.name.localeCompare(b.name)
-  })
+const activeTypeFilter = computed(() => {
+  return catalogState.value.type
 })
 
 const activeZones = computed(() => {
   return zones.value.filter((zone) => zone.status === 'active').length
+})
+
+const totalPages = computed(() => {
+  if (pageData.value.total === 0) {
+    return 1
+  }
+
+  return Math.ceil(pageData.value.total / pageData.value.limit)
+})
+
+const currentRange = computed(() => {
+  if (pageData.value.total === 0) {
+    return 'No results'
+  }
+
+  const start = (pageData.value.page - 1) * pageData.value.limit + 1
+  const end = start + zones.value.length - 1
+
+  return `Showing ${start}-${end} of ${pageData.value.total}`
 })
 
 const averageRate = computed(() => {
@@ -47,39 +96,109 @@ const averageRate = computed(() => {
 })
 
 const previewZone = computed(() => {
-  return visibleZones.value[0] ?? zones.value[0] ?? null
+  return zones.value[0] ?? null
 })
 
 function toggleTypeFilter(nextType: string) {
-  typeFilter.value = typeFilter.value === nextType ? null : nextType
+  replaceCatalogQuery({
+    type: activeTypeFilter.value === nextType ? null : nextType,
+    page: 1,
+  })
 }
 
 function clearTypeFilter() {
-  typeFilter.value = null
+  replaceCatalogQuery({
+    type: null,
+    page: 1,
+  })
 }
 
 function scrollToZones() {
+  if (typeof document === 'undefined') {
+    return
+  }
+
   document.getElementById('zones-grid')?.scrollIntoView({
     behavior: 'smooth',
     block: 'start',
   })
 }
 
-async function loadZones(city: typeof selectedCity.value) {
+function replaceCatalogQuery(patch: Partial<ZoneCatalogQueryState>) {
+  router.replace({
+    query: updateZoneCatalogQuery(route.query, patch),
+  })
+}
+
+function goToPage(nextPage: number) {
+  if (nextPage < 1 || nextPage > totalPages.value || nextPage === pageData.value.page) {
+    return
+  }
+
+  router.push({
+    query: updateZoneCatalogQuery(route.query, {
+      page: nextPage,
+    }),
+  })
+  scrollToZones()
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'AbortError'
+}
+
+async function loadZones(state: ZoneCatalogQueryState) {
+  const requestId = ++activeRequestId
+  activeController?.abort()
+  const controller = new AbortController()
+  activeController = controller
   loading.value = true
   error.value = ''
-  typeFilter.value = null
 
   try {
-    zones.value = await fetchZones(city)
+    const data = await fetchZones(state, controller.signal)
+
+    if (requestId !== activeRequestId) {
+      return
+    }
+
+    const responsePageCount = Math.max(1, Math.ceil(data.total / data.limit))
+
+    if (data.total > 0 && data.items.length === 0 && data.page > responsePageCount) {
+      router.replace({
+        query: updateZoneCatalogQuery(route.query, {
+          page: responsePageCount,
+        }),
+      })
+
+      return
+    }
+
+    pageData.value = data
   } catch (err) {
+    if (requestId !== activeRequestId || isAbortError(err)) {
+      return
+    }
+
     error.value = err instanceof Error ? err.message : 'Failed to load zones'
   } finally {
-    loading.value = false
+    if (requestId === activeRequestId) {
+      loading.value = false
+
+      if (activeController === controller) {
+        activeController = null
+      }
+    }
   }
 }
 
-watch(selectedCity, loadZones, { immediate: true })
+watch(catalogState, loadZones, { immediate: true })
+
+onUnmounted(() => {
+  activeRequestId += 1
+  activeController?.abort()
+  activeController = null
+})
 </script>
 
 <template>
@@ -100,16 +219,16 @@ watch(selectedCity, loadZones, { immediate: true })
 
         <div class="hero-metrics">
           <article class="metric">
-            <span class="metric-value">{{ zones.length }}</span>
-            <span class="metric-label">zones in feed</span>
+            <span class="metric-value">{{ pageData.total }}</span>
+            <span class="metric-label">matching zones</span>
           </article>
           <article class="metric">
-            <span class="metric-value">{{ activeZones }}</span>
-            <span class="metric-label">currently active</span>
+            <span class="metric-value">{{ zones.length }}</span>
+            <span class="metric-label">shown on this page</span>
           </article>
           <article class="metric">
             <span class="metric-value">€{{ averageRate.toFixed(2) }}</span>
-            <span class="metric-label">average hourly rate</span>
+            <span class="metric-label">page avg hourly rate</span>
           </article>
         </div>
       </div>
@@ -158,28 +277,29 @@ watch(selectedCity, loadZones, { immediate: true })
             glance.
           </p>
         </div>
-        <span class="catalog-count">{{ visibleZones.length }} results</span>
+        <span class="catalog-count">{{ pageData.total }} results</span>
       </div>
 
       <div class="toolbar">
         <label class="field">
           <span>Search</span>
-          <input v-model="query" placeholder="Search zones..." class="search" />
+          <input v-model="searchQuery" placeholder="Search zones..." class="search" />
         </label>
 
         <label class="field field-small">
           <span>Sort</span>
           <select v-model="sortBy" class="select">
             <option value="name">Sort by name</option>
-            <option value="price">Sort by price</option>
+            <option value="price_desc">Price: high to low</option>
+            <option value="price_asc">Price: low to high</option>
           </select>
         </label>
       </div>
 
-      <div v-if="typeFilter" class="active-filters">
+      <div v-if="activeTypeFilter" class="active-filters">
         <span class="active-filters-label">Filtered by type</span>
         <button type="button" class="active-filter-chip" @click="clearTypeFilter">
-          {{ typeFilter }} ×
+          {{ activeTypeFilter }} ×
         </button>
       </div>
 
@@ -198,18 +318,45 @@ watch(selectedCity, loadZones, { immediate: true })
 
       <div v-if="loading" class="state">Loading zones…</div>
       <div v-else-if="error" class="state error">{{ error }}</div>
-      <div v-else-if="visibleZones.length === 0" class="state">
+      <div v-else-if="zones.length === 0" class="state">
         No zones found in {{ selectedCityLabel }}
       </div>
 
       <div v-else class="grid">
         <ZoneCard
-          v-for="zone in visibleZones"
+          v-for="zone in zones"
           :key="zone.id"
           :zone="zone"
-          :is-type-active="typeFilter === zone.type"
+          :is-type-active="activeTypeFilter === zone.type"
           @filter-type="toggleTypeFilter"
         />
+      </div>
+
+      <div v-if="!loading && !error && pageData.total > 0" class="pagination">
+        <p class="pagination-summary">
+          {{ currentRange }}
+          <span class="pagination-active">{{ activeZones }} active on this page</span>
+        </p>
+
+        <div class="pagination-actions">
+          <button
+            type="button"
+            class="pagination-button"
+            :disabled="pageData.page === 1"
+            @click="goToPage(pageData.page - 1)"
+          >
+            Previous
+          </button>
+          <span class="pagination-page">Page {{ pageData.page }} / {{ totalPages }}</span>
+          <button
+            type="button"
+            class="pagination-button"
+            :disabled="pageData.page >= totalPages"
+            @click="goToPage(pageData.page + 1)"
+          >
+            Next
+          </button>
+        </div>
       </div>
     </section>
   </section>
@@ -711,6 +858,68 @@ watch(selectedCity, loadZones, { immediate: true })
   margin-top: 22px;
 }
 
+.pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.pagination-summary {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.pagination-active {
+  color: #c8f2ad;
+}
+
+.pagination-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.pagination-button {
+  min-height: 42px;
+  padding: 0 16px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: white;
+  font-weight: 800;
+  cursor: pointer;
+  transition:
+    transform 0.18s ease,
+    border-color 0.18s ease,
+    background 0.18s ease,
+    opacity 0.18s ease;
+}
+
+.pagination-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: rgba(138, 242, 90, 0.4);
+  background: rgba(138, 242, 90, 0.12);
+}
+
+.pagination-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.pagination-page {
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 14px;
+  font-weight: 800;
+}
+
 @media (max-width: 1080px) {
   .hero-panel {
     grid-template-columns: 1fr;
@@ -755,6 +964,10 @@ watch(selectedCity, loadZones, { immediate: true })
 
   .active-filters,
   .type-hints {
+    align-items: flex-start;
+  }
+
+  .pagination {
     align-items: flex-start;
   }
 }

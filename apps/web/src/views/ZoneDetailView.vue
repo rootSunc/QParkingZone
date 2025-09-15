@@ -1,18 +1,21 @@
 <script setup lang="ts">
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import L from 'leaflet'
 import { fetchZone, type ZoneDetail } from '../api/zones'
 import { getCityLabel } from '@/config/cities'
 import { useCitySelection } from '@/composables/useCitySelection'
+import { updateZoneCatalogQuery } from '@/composables/useZoneCatalogRoute'
 import 'leaflet/dist/leaflet.css'
 
 const props = defineProps<{ id: string }>()
+const route = useRoute()
+const router = useRouter()
 const zone = ref<ZoneDetail | null>(null)
 const loading = ref(false)
 const error = ref('')
 const mapElement = ref<HTMLElement | null>(null)
-const { setSelectedCity } = useCitySelection()
+const { selectedCity, selectedCityLabel } = useCitySelection(() => route.query)
 let map: any | null = null
 let activeRequestId = 0
 
@@ -26,10 +29,19 @@ const mapUrl = computed(() => {
 
 const zoneCityLabel = computed(() => {
   if (!zone.value) {
-    return 'city'
+    return selectedCityLabel.value
   }
 
   return getCityLabel(zone.value.city)
+})
+
+const backToZonesRoute = computed(() => {
+  return {
+    name: 'zones',
+    query: updateZoneCatalogQuery(route.query, {
+      city: zone.value?.city ?? selectedCity.value,
+    }),
+  }
 })
 
 function destroyMap() {
@@ -70,9 +82,17 @@ async function loadZone(id: string) {
       return
     }
 
-    setSelectedCity(data.city)
     zone.value = data
     loading.value = false
+
+    if (selectedCity.value !== data.city) {
+      router.replace({
+        query: updateZoneCatalogQuery(route.query, {
+          city: data.city,
+        }),
+      })
+    }
+
     await nextTick()
 
     if (requestId !== activeRequestId) {
@@ -100,7 +120,7 @@ onUnmounted(() => {
 
 <template>
   <section class="page">
-    <RouterLink to="/" class="back-link">Back to {{ zoneCityLabel }} zones</RouterLink>
+    <RouterLink :to="backToZonesRoute" class="back-link">Back to {{ zoneCityLabel }} zones</RouterLink>
 
     <div v-if="loading" class="state">Loading zone details…</div>
 

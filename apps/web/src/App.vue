@@ -1,22 +1,37 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { useCitySelection } from '@/composables/useCitySelection'
 import type { CitySlug } from '@/config/cities'
+import { updateZoneCatalogQuery } from '@/composables/useZoneCatalogRoute'
 
 const route = useRoute()
 const router = useRouter()
-const { cityOptions, selectedCity, selectedCityLabel, setSelectedCity } = useCitySelection()
+const { cityOptions, selectedCity, selectedCityLabel } = useCitySelection(() => route.query)
+
+const zonesRoute = computed(() => {
+  return {
+    name: 'zones',
+    query: updateZoneCatalogQuery(route.query, { city: selectedCity.value }),
+  }
+})
 
 function switchCity(nextCity: CitySlug) {
-  if (selectedCity.value === nextCity) {
+  if (selectedCity.value === nextCity && route.name === 'zones') {
     return
   }
 
-  setSelectedCity(nextCity)
+  const nextQuery = updateZoneCatalogQuery(route.query, {
+    city: nextCity,
+    page: 1,
+  })
 
   if (route.name === 'zone-detail') {
-    router.push({ name: 'zones' })
+    router.push({ name: 'zones', query: nextQuery })
+    return
   }
+
+  router.replace({ query: nextQuery })
 }
 </script>
 
@@ -24,7 +39,7 @@ function switchCity(nextCity: CitySlug) {
   <div class="app-shell">
     <header class="site-header">
       <div class="site-header-inner">
-        <RouterLink to="/" class="brand">
+        <RouterLink :to="zonesRoute" class="brand">
           <span class="brand-mark" aria-hidden="true">
             <span class="brand-letter">Q</span>
           </span>
@@ -35,7 +50,7 @@ function switchCity(nextCity: CitySlug) {
         </RouterLink>
 
         <nav class="nav" aria-label="Primary">
-          <RouterLink to="/" class="nav-link">Zones</RouterLink>
+          <RouterLink :to="zonesRoute" class="nav-link">Zones</RouterLink>
           <div class="city-switcher" aria-label="City switcher">
             <button
               v-for="city in cityOptions"

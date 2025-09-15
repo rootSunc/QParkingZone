@@ -7,27 +7,42 @@ describe('zones api', () => {
   })
 
   it('returns parsed zone summaries', async () => {
-    const mockZones = [
-      {
-        id: 1,
-        name: 'Kamppi Center',
-        city: 'helsinki',
-        type: 'commercial',
-        status: 'active',
-        hourlyRateEur: 4.5,
-        latitude: 60.1685,
-        longitude: 24.9318,
-      },
-    ]
+    const mockZones = {
+      items: [
+        {
+          id: 1,
+          name: 'Kamppi Center',
+          city: 'helsinki',
+          type: 'commercial',
+          status: 'active',
+          hourlyRateEur: 4.5,
+          latitude: 60.1685,
+          longitude: 24.9318,
+        },
+      ],
+      total: 1,
+      page: 1,
+      limit: 4,
+    }
 
     vi.spyOn(global, 'fetch').mockResolvedValue({
       ok: true,
       json: async () => mockZones,
     } as Response)
 
-    const result = await fetchZones('helsinki')
+    const result = await fetchZones({
+      city: 'helsinki',
+      q: 'kamppi',
+      type: 'commercial',
+      sort: 'price_desc',
+      page: 2,
+      limit: 4,
+    })
 
-    expect(fetch).toHaveBeenCalledWith('/api/zones?city=helsinki')
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/zones?city=helsinki&q=kamppi&type=commercial&sort=price_desc&page=2&limit=4',
+      { signal: undefined },
+    )
     expect(result).toEqual(mockZones)
   })
 
@@ -57,7 +72,7 @@ describe('zones api', () => {
 
     const result = await fetchZone(1)
 
-    expect(fetch).toHaveBeenCalledWith('/api/zones/1')
+    expect(fetch).toHaveBeenCalledWith('/api/zones/1', { signal: undefined })
     expect(result).toEqual(mockZone)
   })
 
@@ -67,6 +82,6 @@ describe('zones api', () => {
       json: async () => ({ error: 'Failed to fetch zones' }),
     } as Response)
 
-    await expect(fetchZones()).rejects.toThrow('Failed to fetch zones')
+    await expect(fetchZones({ city: 'helsinki' })).rejects.toThrow('Failed to fetch zones')
   })
 })

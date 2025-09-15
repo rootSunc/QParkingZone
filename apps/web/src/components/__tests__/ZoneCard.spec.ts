@@ -1,28 +1,61 @@
-import { RouterLinkStub, mount } from '@vue/test-utils'
+import { mount } from '@vue/test-utils'
+import { createMemoryHistory, createRouter } from 'vue-router'
 import { describe, expect, it } from 'vitest'
 import ZoneCard from '@/components/ZoneCard.vue'
 
+const DummyView = {
+  template: '<div />',
+}
+
+async function mountZoneCard() {
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [
+      {
+        path: '/',
+        name: 'zones',
+        component: DummyView,
+      },
+      {
+        path: '/zones/:id',
+        name: 'zone-detail',
+        component: DummyView,
+      },
+    ],
+  })
+
+  await router.push({
+    name: 'zones',
+    query: {
+      city: 'helsinki',
+      q: 'kamppi',
+      type: 'commercial',
+    },
+  })
+  await router.isReady()
+
+  return mount(ZoneCard, {
+    props: {
+      zone: {
+        id: 1,
+        name: 'Kamppi Center',
+        city: 'helsinki',
+        type: 'commercial',
+        status: 'active',
+        hourlyRateEur: 4.5,
+        latitude: 60.1685,
+        longitude: 24.9318,
+      },
+    },
+    global: {
+      plugins: [router],
+    },
+  })
+}
+
 describe('ZoneCard', () => {
-  it('renders zone name, status, type, and price', () => {
-    const wrapper = mount(ZoneCard, {
-      props: {
-        zone: {
-          id: 1,
-          name: 'Kamppi Center',
-          city: 'helsinki',
-          type: 'commercial',
-          status: 'active',
-          hourlyRateEur: 4.5,
-          latitude: 60.1685,
-          longitude: 24.9318,
-        },
-      },
-      global: {
-        stubs: {
-          RouterLink: RouterLinkStub,
-        },
-      },
-    })
+  it('renders zone name, status, type, and price', async () => {
+    const wrapper = await mountZoneCard()
 
     expect(wrapper.text()).toContain('Kamppi Center')
     expect(wrapper.text()).toContain('commercial')
@@ -33,53 +66,18 @@ describe('ZoneCard', () => {
   })
 
   it('emits filter-type when the type chip is clicked', async () => {
-    const wrapper = mount(ZoneCard, {
-      props: {
-        zone: {
-          id: 2,
-          name: 'Test Zone',
-          city: 'helsinki',
-          type: 'street',
-          status: 'inactive',
-          hourlyRateEur: 2,
-          latitude: 60,
-          longitude: 24,
-        },
-      },
-      global: {
-        stubs: {
-          RouterLink: RouterLinkStub,
-        },
-      },
-    })
+    const wrapper = await mountZoneCard()
 
     await wrapper.get('button.type-filter').trigger('click')
 
-    expect(wrapper.emitted('filter-type')).toEqual([['street']])
+    expect(wrapper.emitted('filter-type')).toEqual([['commercial']])
   })
 
-  it('renders a direct map link for view zone', () => {
-    const wrapper = mount(ZoneCard, {
-      props: {
-        zone: {
-          id: 3,
-          name: 'Map Zone',
-          city: 'helsinki',
-          type: 'street',
-          status: 'active',
-          hourlyRateEur: 3.5,
-          latitude: 60.167,
-          longitude: 24.9475,
-        },
-      },
-      global: {
-        stubs: {
-          RouterLink: RouterLinkStub,
-        },
-      },
-    })
+  it('preserves the current list query in the detail link', async () => {
+    const wrapper = await mountZoneCard()
 
-    expect(wrapper.get('a.cta').attributes('href')).toContain('openstreetmap.org')
-    expect(wrapper.get('a.cta').attributes('href')).toContain('60.167')
+    expect(wrapper.get('a.title-link').attributes('href')).toContain('/zones/1')
+    expect(wrapper.get('a.title-link').attributes('href')).toContain('city=helsinki')
+    expect(wrapper.get('a.title-link').attributes('href')).toContain('q=kamppi')
   })
 })

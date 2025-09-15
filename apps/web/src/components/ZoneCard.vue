@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRoute } from 'vue-router'
 import type { ZoneSummary } from '@/api/zones'
 
 const props = defineProps<{
@@ -11,9 +11,14 @@ const props = defineProps<{
 const emit = defineEmits<{
   'filter-type': [type: string]
 }>()
+const route = useRoute()
 
 const detailRoute = computed(() => {
-  return `/zones/${props.zone.id}`
+  return {
+    name: 'zone-detail',
+    params: { id: props.zone.id },
+    query: route.query,
+  }
 })
 
 const mapUrl = computed(() => {

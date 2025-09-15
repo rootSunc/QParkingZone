@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace ParkingZones\Repository;
 
 use PDO;
+use PDOStatement;
 use RuntimeException;
 
 final class ZoneRepository
@@ -12,26 +13,18 @@ final class ZoneRepository
     {
     }
 
-    public function fetchAllSummaries(?string $city = null): array
+    public function fetchAllSummaries(
+        ?string $city = null,
+        ?string $query = null,
+        ?string $type = null,
+        ?string $status = null,
+        string $sort = 'name',
+        int $page = 1,
+        int $limit = 20
+    ): array
     {
-        if ($city === null) {
-            $sql = "
-                SELECT
-                    id,
-                    name,
-                    city,
-                    type,
-                    status,
-                    hourly_rate_eur AS hourlyRateEur,
-                    latitude,
-                    longitude
-                FROM zones
-                ORDER BY name ASC
-            ";
-
-            return $this->pdo->query($sql)->fetchAll();
-        }
-
+        [$whereClause, $params] = $this->buildSummaryFilters($city, $query, $type, $status);
+        $offset = ($page - 1) * $limit;
         $stmt = $this->pdo->prepare("
             SELECT
                 id,
@@ -43,12 +36,22 @@ final class ZoneRepository
                 latitude,
                 longitude
             FROM zones
-            WHERE city = :city
-            ORDER BY name ASC
+            {$whereClause}
+            ORDER BY {$this->resolveSummarySort($sort)}
+            LIMIT :limit OFFSET :offset
         ");
-        $stmt->execute(['city' => $city]);
 
-        return $stmt->fetchAll();
+        $this->bindSummaryFilterParams($stmt, $params);
+        $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+        $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+        $stmt->execute();
+
+        return [
+            'items' => $stmt->fetchAll(),
+            'total' => $this->countSummaries($whereClause, $params),
+            'page' => $page,
+            'limit' => $limit,
+        ];
     }
 
     public function fetchDetailById(int $id): ?array
@@ -116,5 +119,69 @@ final class ZoneRepository
         }
 
         return $openingHours;
+    }
+
+    private function buildSummaryFilters(
+        ?string $city,
+        ?string $query,
+        ?string $type,
+        ?string $status
+    ): array {
+        $clauses = [];
+        $params = [];
+
+        if ($city !== null) {
+            $clauses[] = 'city = :city';
+            $params['city'] = $city;
+        }
+
+        if ($query !== null) {
+            $clauses[] = 'LOWER(name) LIKE :query';
+            $params['query'] = '%' . strtolower($query) . '%';
+        }
+
+        if ($type !== null) {
+            $clauses[] = 'type = :type';
+            $params['type'] = $type;
+        }
+
+        if ($status !== null) {
+            $clauses[] = 'status = :status';
+            $params['status'] = $status;
+        }
+
+        return [
+            $clauses === [] ? '' : 'WHERE ' . implode(' AND ', $clauses),
+            $params,
+        ];
+    }
+
+    private function countSummaries(string $whereClause, array $params): int
+    {
+        $stmt = $this->pdo->prepare("
+            SELECT COUNT(*)
+            FROM zones
+            {$whereClause}
+        ");
+        $this->bindSummaryFilterParams($stmt, $params);
+        $stmt->execute();
+
+        return (int) $stmt->fetchColumn();
+    }
+
+    private function bindSummaryFilterParams(PDOStatement $stmt, array $params): void
+    {
+        foreach ($params as $name => $value) {
+            $stmt->bindValue(':' . $name, $value, PDO::PARAM_STR);
+        }
+    }
+
+    private function resolveSummarySort(string $sort): string
+    {
+        return match ($sort) {
+            'price_asc' => 'hourly_rate_eur ASC, name ASC',
+            'price_desc' => 'hourly_rate_eur DESC, name ASC',
+            default => 'name ASC',
+        };
     }
 }

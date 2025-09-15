@@ -14,3 +14,8 @@ CREATE TABLE IF NOT EXISTS zones (
   opening_hours TEXT NOT NULL
     CHECK (json_valid(opening_hours) AND json_type(opening_hours) = 'object')
 );
+
+CREATE INDEX IF NOT EXISTS idx_zones_city ON zones (city);
+CREATE INDEX IF NOT EXISTS idx_zones_type ON zones (type);
+CREATE INDEX IF NOT EXISTS idx_zones_status ON zones (status);
+CREATE INDEX IF NOT EXISTS idx_zones_name ON zones (name);
