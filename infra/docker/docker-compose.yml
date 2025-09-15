@@ -1,0 +1,25 @@
+version: "3.9"
+
+services:
+  backend:
+    build:
+      context: ../../apps/api
+      dockerfile: ../../infra/docker/backend.Dockerfile
+    container_name: parking-zones-backend
+    ports:
+      - "8000:8000"
+    command: sh -lc "php scripts/init-db.php && php -S 0.0.0.0:8000 -t public"
+    environment:
+      APP_ENV: development
+      APP_DEBUG: "true"
+      PARKING_ZONES_AUTO_SEED: "true"
+
+  frontend:
+    build:
+      context: ../../apps/web
+      dockerfile: ../../infra/docker/frontend.Dockerfile
+    container_name: parking-zones-frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend

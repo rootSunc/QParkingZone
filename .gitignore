@@ -1,0 +1,16 @@
+.DS_Store
+.idea/
+
+# Backend artifacts
+/apps/api/.phpunit.cache/
+/apps/api/node_modules/
+/apps/api/vendor/
+/apps/api/var/
+
+# Frontend artifacts
+/apps/web/.env
+/apps/web/.env.*
+!/apps/web/.env.example
+/apps/web/.vite/
+/apps/web/dist/
+/apps/web/node_modules/

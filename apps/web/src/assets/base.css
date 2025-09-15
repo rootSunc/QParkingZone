@@ -1,0 +1,82 @@
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&display=swap');
+
+:root {
+  color-scheme: light;
+  --page-bg: #f2ede3;
+  --page-bg-soft: #fbf8f2;
+  --surface: rgba(255, 255, 255, 0.82);
+  --surface-strong: #ffffff;
+  --surface-dark: #121212;
+  --surface-dark-soft: #1a1a1a;
+  --text-strong: #121212;
+  --text-muted: #5f5a50;
+  --text-subtle: #8d867a;
+  --line-soft: rgba(18, 18, 18, 0.12);
+  --line-strong: rgba(18, 18, 18, 0.22);
+  --accent: #8af25a;
+  --accent-strong: #72dd42;
+  --accent-ink: #436d24;
+  --accent-soft: rgba(138, 242, 90, 0.18);
+  --danger-soft: rgba(220, 38, 38, 0.12);
+  --danger-text: #991b1b;
+  --shadow-soft: 0 24px 60px rgba(18, 18, 18, 0.08);
+  --shadow-strong: 0 30px 90px rgba(18, 18, 18, 0.14);
+  --radius-xl: 36px;
+  --radius-lg: 28px;
+  --radius-md: 20px;
+  --radius-sm: 14px;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+html,
+body,
+#app {
+  margin: 0;
+  width: 100%;
+  min-height: 100%;
+}
+
+body {
+  min-width: 320px;
+  line-height: 1.5;
+  font-family: 'Manrope', 'Avenir Next', 'Segoe UI', sans-serif;
+  color: var(--text-strong);
+  background:
+    radial-gradient(circle at top right, rgba(138, 242, 90, 0.18), transparent 24%),
+    radial-gradient(circle at left 18%, rgba(18, 18, 18, 0.05), transparent 28%),
+    linear-gradient(180deg, var(--page-bg-soft) 0%, var(--page-bg) 100%);
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+img {
+  display: block;
+  max-width: 100%;
+}
+
+::selection {
+  background: rgba(138, 242, 90, 0.4);
+}
