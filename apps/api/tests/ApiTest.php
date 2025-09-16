@@ -44,9 +44,10 @@ final class ApiTest extends TestCase
         $this->assertSame(1, $data['page']);
         $this->assertSame(20, $data['limit']);
         $this->assertSame(
-            ['id', 'name', 'city', 'type', 'status', 'hourlyRateEur', 'latitude', 'longitude'],
+            ['id', 'name', 'city', 'type', 'status', 'hourlyRateEur', 'latitude', 'longitude', 'openingHours'],
             array_keys($data['items'][0])
         );
+        $this->assertSame(['weekdays', 'weekends'], array_keys($data['items'][0]['openingHours']));
     }
 
     public function testGetZonesCanBeFilteredByCity(): void

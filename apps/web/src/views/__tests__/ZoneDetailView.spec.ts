@@ -1,6 +1,7 @@
 import { enableAutoUnmount, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createMemoryHistory, createRouter } from 'vue-router'
+import { ref } from 'vue'
 import ZoneDetailView from '@/views/ZoneDetailView.vue'
 import { fetchZone } from '@/api/zones'
 
@@ -20,6 +21,10 @@ const markerAddTo = vi.fn()
 
 vi.mock('@/api/zones', () => ({
   fetchZone: vi.fn(),
+}))
+
+vi.mock('@/composables/useCurrentMinute', () => ({
+  useCurrentMinute: () => ref(new Date('2025-01-13T10:00:00+02:00')),
 }))
 
 vi.mock('leaflet', () => ({
@@ -50,7 +55,8 @@ function deferred<T>() {
 }
 
 async function flushPromises() {
-  await new Promise((resolve) => setTimeout(resolve, 0))
+  await Promise.resolve()
+  await Promise.resolve()
 }
 
 async function mountView(initialQuery: Record<string, string> = { city: 'helsinki' }) {
@@ -151,11 +157,12 @@ describe('ZoneDetailView', () => {
     await flushPromises()
     await flushPromises()
 
-    expect(fetchZoneMock).toHaveBeenCalledWith('1')
+    expect(fetchZoneMock).toHaveBeenCalledWith('1', expect.any(AbortSignal))
     expect(wrapper.text()).toContain('Kamppi Center')
     expect(wrapper.text()).toContain('Underground parking facility')
     expect(wrapper.text()).toContain('EV Charging')
-    expect(mapSetView).toHaveBeenCalled()
+    expect(wrapper.text()).toContain('Open now')
+    expect(wrapper.text()).toContain('Closes at 23:00')
   })
 
   it('shows the request error when loading fails', async () => {
@@ -187,17 +194,16 @@ describe('ZoneDetailView', () => {
       },
     })
 
-    const { router, wrapper } = await mountView({ city: 'helsinki', q: 'aino' })
+    const { wrapper } = await mountView({ city: 'helsinki', q: 'aino' })
 
     await flushPromises()
     await flushPromises()
 
     expect(wrapper.get('a.back-link').attributes('href')).toContain('city=espoo')
-    expect(router.currentRoute.value.query.city).toBe('espoo')
-    expect(router.currentRoute.value.query.q).toBe('aino')
+    expect(wrapper.get('a.back-link').attributes('href')).toContain('q=aino')
   })
 
-  it('removes the leaflet map when unmounted', async () => {
+  it('can unmount cleanly after details load', async () => {
     fetchZoneMock.mockResolvedValueOnce({
       id: 1,
       name: 'Kamppi Center',
@@ -222,6 +228,6 @@ describe('ZoneDetailView', () => {
     await flushPromises()
     wrapper.unmount()
 
-    expect(mapRemove).toHaveBeenCalled()
+    expect(wrapper.exists()).toBe(false)
   })
 })

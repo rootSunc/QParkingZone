@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
-import L from 'leaflet'
 import { fetchZone, type ZoneDetail } from '../api/zones'
+import { useCurrentMinute } from '@/composables/useCurrentMinute'
 import { getCityLabel } from '@/config/cities'
 import { useCitySelection } from '@/composables/useCitySelection'
 import { updateZoneCatalogQuery } from '@/composables/useZoneCatalogRoute'
+import { getZoneAvailability } from '@/utils/zoneAvailability'
 import 'leaflet/dist/leaflet.css'
 
 const props = defineProps<{ id: string }>()
@@ -14,10 +15,15 @@ const router = useRouter()
 const zone = ref<ZoneDetail | null>(null)
 const loading = ref(false)
 const error = ref('')
+const mapLoading = ref(false)
+const mapError = ref('')
 const mapElement = ref<HTMLElement | null>(null)
 const { selectedCity, selectedCityLabel } = useCitySelection(() => route.query)
+const now = useCurrentMinute()
 let map: any | null = null
 let activeRequestId = 0
+let activeController: AbortController | null = null
+let leafletLoader: Promise<any> | null = null
 
 const mapUrl = computed(() => {
   if (!zone.value) {
@@ -44,6 +50,18 @@ const backToZonesRoute = computed(() => {
   }
 })
 
+const availability = computed(() => {
+  if (!zone.value) {
+    return null
+  }
+
+  return getZoneAvailability(zone.value.status, zone.value.openingHours, now.value)
+})
+
+const availabilityClass = computed(() => {
+  return availability.value?.state ?? 'closed'
+})
+
 function destroyMap() {
   if (map) {
     map.remove()
@@ -51,33 +69,71 @@ function destroyMap() {
   }
 }
 
-function renderMap() {
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'AbortError'
+}
+
+function loadLeaflet() {
+  leafletLoader ??= import('leaflet').then((module) => module.default)
+
+  return leafletLoader
+}
+
+async function renderMap(requestId: number) {
   if (!zone.value || !mapElement.value) {
     return
   }
 
-  destroyMap()
-  map = L.map(mapElement.value).setView([zone.value.latitude, zone.value.longitude], 15)
+  const currentZone = zone.value
+  const targetElement = mapElement.value
+  mapLoading.value = true
+  mapError.value = ''
 
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '&copy; OpenStreetMap contributors',
-  }).addTo(map)
-  L.marker([zone.value.latitude, zone.value.longitude]).addTo(map)
+  try {
+    const leaflet = await loadLeaflet()
 
-  requestAnimationFrame(() => {
-    map?.invalidateSize()
-  })
+    if (requestId !== activeRequestId || zone.value?.id !== currentZone.id || mapElement.value !== targetElement) {
+      return
+    }
+
+    destroyMap()
+    map = leaflet.map(targetElement).setView([currentZone.latitude, currentZone.longitude], 15)
+
+    leaflet
+      .tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors',
+      })
+      .addTo(map)
+    leaflet.marker([currentZone.latitude, currentZone.longitude]).addTo(map)
+
+    requestAnimationFrame(() => {
+      map?.invalidateSize()
+    })
+  } catch (err) {
+    if (requestId === activeRequestId && !isAbortError(err)) {
+      mapError.value = 'Interactive map unavailable'
+    }
+  } finally {
+    if (requestId === activeRequestId) {
+      mapLoading.value = false
+    }
+  }
 }
 
 async function loadZone(id: string) {
   const requestId = ++activeRequestId
+  activeController?.abort()
+  const controller = new AbortController()
+  activeController = controller
   loading.value = true
   error.value = ''
+  mapError.value = ''
+  mapLoading.value = false
   zone.value = null
   destroyMap()
 
   try {
-    const data = await fetchZone(id)
+    const data = await fetchZone(id, controller.signal)
     if (requestId !== activeRequestId) {
       return
     }
@@ -86,7 +142,7 @@ async function loadZone(id: string) {
     loading.value = false
 
     if (selectedCity.value !== data.city) {
-      router.replace({
+      await router.replace({
         query: updateZoneCatalogQuery(route.query, {
           city: data.city,
         }),
@@ -99,14 +155,19 @@ async function loadZone(id: string) {
       return
     }
 
-    renderMap()
+    await renderMap(requestId)
   } catch (err) {
-    if (requestId !== activeRequestId) {
+    if (requestId !== activeRequestId || isAbortError(err)) {
       return
     }
 
     error.value = err instanceof Error ? err.message : 'Failed to load zone'
     loading.value = false
+    mapLoading.value = false
+  } finally {
+    if (requestId === activeRequestId && activeController === controller) {
+      activeController = null
+    }
   }
 }
 
@@ -114,6 +175,8 @@ watch(() => props.id, loadZone, { immediate: true })
 
 onUnmounted(() => {
   activeRequestId += 1
+  activeController?.abort()
+  activeController = null
   destroyMap()
 })
 </script>
@@ -141,6 +204,9 @@ onUnmounted(() => {
               <span class="badge type">{{ zone.type }}</span>
               <span class="badge" :class="zone.status === 'active' ? 'active' : 'inactive'">
                 {{ zone.status }}
+              </span>
+              <span v-if="availability" class="badge badge-availability" :class="availabilityClass">
+                {{ availability.badge }}
               </span>
             </div>
           </div>
@@ -171,6 +237,11 @@ onUnmounted(() => {
         <div class="panel panel-dark">
           <p class="panel-kicker">Plan your stop</p>
           <h2>Opening Hours</h2>
+
+          <div v-if="availability" class="availability-summary" :class="availabilityClass">
+            <strong>{{ availability.badge }}</strong>
+            <span>{{ availability.detail }}</span>
+          </div>
 
           <div class="detail-row">
             <span class="detail-label">Weekdays</span>
@@ -228,6 +299,9 @@ onUnmounted(() => {
 
         <div class="map-shell">
           <div ref="mapElement" class="map"></div>
+          <div v-if="mapLoading || mapError" class="map-overlay">
+            {{ mapError || 'Loading interactive map…' }}
+          </div>
         </div>
       </section>
     </article>
@@ -386,6 +460,21 @@ onUnmounted(() => {
   color: #fecaca;
 }
 
+.badge-availability.open {
+  background: rgba(138, 242, 90, 0.18);
+  color: #daf5c7;
+}
+
+.badge-availability.closed {
+  background: rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.badge-availability.inactive {
+  background: rgba(220, 38, 38, 0.18);
+  color: #fecaca;
+}
+
 .hero-stats {
   display: grid;
   gap: 16px;
@@ -478,6 +567,33 @@ onUnmounted(() => {
   font-size: 28px;
   line-height: 1;
   letter-spacing: -0.04em;
+}
+
+.availability-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: center;
+  margin-bottom: 18px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.availability-summary.open {
+  background: rgba(138, 242, 90, 0.14);
+  color: #daf5c7;
+}
+
+.availability-summary.closed {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.84);
+}
+
+.availability-summary.inactive {
+  background: rgba(220, 38, 38, 0.14);
+  color: #fecaca;
 }
 
 .detail-row {
@@ -573,6 +689,7 @@ onUnmounted(() => {
 }
 
 .map-shell {
+  position: relative;
   min-height: 100%;
   padding: 6px;
   border-radius: 28px;
@@ -587,6 +704,22 @@ onUnmounted(() => {
   border-radius: 22px;
   overflow: hidden;
   border: 1px solid rgba(18, 18, 18, 0.08);
+}
+
+.map-overlay {
+  position: absolute;
+  inset: 24px 24px auto 24px;
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 48px;
+  padding: 0 18px;
+  border-radius: 999px;
+  background: rgba(18, 18, 18, 0.72);
+  color: white;
+  font-size: 13px;
+  font-weight: 800;
+  backdrop-filter: blur(10px);
 }
 
 .map-link {

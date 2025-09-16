@@ -18,6 +18,10 @@ describe('zones api', () => {
           hourlyRateEur: 4.5,
           latitude: 60.1685,
           longitude: 24.9318,
+          openingHours: {
+            weekdays: '06:00-23:30',
+            weekends: '08:00-23:30',
+          },
         },
       ],
       total: 1,

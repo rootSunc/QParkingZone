@@ -2,6 +2,8 @@
 import { computed } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import type { ZoneSummary } from '@/api/zones'
+import { useCurrentMinute } from '@/composables/useCurrentMinute'
+import { getZoneAvailability } from '@/utils/zoneAvailability'
 
 const props = defineProps<{
   zone: ZoneSummary
@@ -12,6 +14,7 @@ const emit = defineEmits<{
   'filter-type': [type: string]
 }>()
 const route = useRoute()
+const now = useCurrentMinute()
 
 const detailRoute = computed(() => {
   return {
@@ -25,6 +28,10 @@ const mapUrl = computed(() => {
   return `https://www.openstreetmap.org/?mlat=${props.zone.latitude}&mlon=${props.zone.longitude}#map=16/${props.zone.latitude}/${props.zone.longitude}`
 })
 
+const availability = computed(() => {
+  return getZoneAvailability(props.zone.status, props.zone.openingHours, now.value)
+})
+
 function toggleTypeFilter() {
   emit('filter-type', props.zone.type)
 }
@@ -34,8 +41,8 @@ function toggleTypeFilter() {
   <article class="zone-card">
     <div class="card-top">
       <p class="eyebrow">Zone {{ zone.id }}</p>
-      <span class="status-pill" :class="zone.status === 'active' ? 'active' : 'inactive'">
-        {{ zone.status }}
+      <span class="status-pill" :class="availability.state">
+        {{ availability.badge }}
       </span>
     </div>
 
@@ -45,6 +52,11 @@ function toggleTypeFilter() {
 
     <p class="body-copy">
       Compare the hourly rate, check current status, and open the detailed map view in one tap.
+    </p>
+
+    <p class="availability-copy">
+      {{ availability.detail }}
+      <span class="availability-hours">{{ availability.schedule }}</span>
     </p>
 
     <div class="meta">
@@ -138,9 +150,14 @@ function toggleTypeFilter() {
   text-transform: capitalize;
 }
 
-.status-pill.active {
+.status-pill.open {
   background: var(--accent-soft);
   color: #315b1f;
+}
+
+.status-pill.closed {
+  background: rgba(18, 18, 18, 0.08);
+  color: #5b564d;
 }
 
 .status-pill.inactive {
@@ -171,6 +188,29 @@ function toggleTypeFilter() {
   margin: 12px 0 0;
   color: #534e45;
   font-size: 15px;
+}
+
+.availability-copy {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  align-items: center;
+  margin: 14px 0 0;
+  color: #3f3b34;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.availability-hours {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgba(18, 18, 18, 0.06);
+  color: #6e675d;
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .meta {

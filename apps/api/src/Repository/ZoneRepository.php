@@ -34,7 +34,8 @@ final class ZoneRepository
                 status,
                 hourly_rate_eur AS hourlyRateEur,
                 latitude,
-                longitude
+                longitude,
+                opening_hours AS openingHours
             FROM zones
             {$whereClause}
             ORDER BY {$this->resolveSummarySort($sort)}
@@ -46,8 +47,16 @@ final class ZoneRepository
         $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
         $stmt->execute();
 
+        $items = $stmt->fetchAll();
+
+        foreach ($items as &$item) {
+            $item['openingHours'] = $this->decodeOpeningHours($item['openingHours']);
+        }
+
+        unset($item);
+
         return [
-            'items' => $stmt->fetchAll(),
+            'items' => $items,
             'total' => $this->countSummaries($whereClause, $params),
             'page' => $page,
             'limit' => $limit,

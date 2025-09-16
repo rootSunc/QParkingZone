@@ -22,6 +22,7 @@ infra/
 - View all parking zones
 - View detailed zone information
 - Search, filter, sort, and paginate zones
+- Live `open now` / `closed now` availability from opening hours
 - Map view with location pin
 - Shareable URL state for city and catalog filters
 - Responsive UI (mobile + desktop)
@@ -98,7 +99,11 @@ Supported query params:
       "status": "active",
       "hourlyRateEur": 4.5,
       "latitude": 60.1685,
-      "longitude": 24.9318
+      "longitude": 24.9318,
+      "openingHours": {
+        "weekdays": "00:00-23:59",
+        "weekends": "00:00-23:59"
+      }
     }
   ],
   "total": 5,
@@ -172,6 +177,7 @@ Frontend environment variables:
 - No authentication
 - No real-time availability or occupancy feed
 - No amenity or distance filtering yet
+- `Open now` is computed from static opening-hours data rather than live operator feeds
 - Uses public OpenStreetMap tiles
 - Docker setup is aimed at local development rather than production orchestration
 

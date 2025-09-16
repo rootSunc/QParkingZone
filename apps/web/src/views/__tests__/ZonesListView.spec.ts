@@ -1,11 +1,16 @@
 import { enableAutoUnmount, mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createMemoryHistory, createRouter } from 'vue-router'
+import { ref } from 'vue'
 import ZonesListView from '@/views/ZonesListView.vue'
 import { fetchZones, type ZonesPage } from '@/api/zones'
 
 vi.mock('@/api/zones', () => ({
   fetchZones: vi.fn(),
+}))
+
+vi.mock('@/composables/useCurrentMinute', () => ({
+  useCurrentMinute: () => ref(new Date('2025-01-13T10:00:00+02:00')),
 }))
 
 const fetchZonesMock = vi.mocked(fetchZones)
@@ -33,6 +38,24 @@ function createZonesPage(items: ZonesPage['items'], overrides: Partial<ZonesPage
     total: items.length,
     page: 1,
     limit: 4,
+    ...overrides,
+  }
+}
+
+function createZoneSummary(overrides: Partial<ZonesPage['items'][number]> = {}): ZonesPage['items'][number] {
+  return {
+    id: 1,
+    name: 'Kamppi Center',
+    city: 'helsinki',
+    type: 'commercial',
+    status: 'active',
+    hourlyRateEur: 4.5,
+    latitude: 60.1685,
+    longitude: 24.9318,
+    openingHours: {
+      weekdays: '06:00-23:30',
+      weekends: '08:00-23:30',
+    },
     ...overrides,
   }
 }
@@ -100,16 +123,7 @@ describe('ZonesListView', () => {
 
     pending.resolve(
       createZonesPage([
-        {
-          id: 1,
-          name: 'Kamppi Center',
-          city: 'helsinki',
-          type: 'commercial',
-          status: 'active',
-          hourlyRateEur: 4.5,
-          latitude: 60.1685,
-          longitude: 24.9318,
-        },
+        createZoneSummary(),
       ]),
     )
     await flushPromises()
@@ -142,40 +156,35 @@ describe('ZonesListView', () => {
     fetchZonesMock
       .mockResolvedValueOnce(
         createZonesPage([
-          {
-            id: 1,
-            name: 'Kamppi Center',
-            city: 'helsinki',
-            type: 'commercial',
-            status: 'active',
-            hourlyRateEur: 4.5,
-            latitude: 60.1685,
-            longitude: 24.9318,
-          },
-          {
+          createZoneSummary(),
+          createZoneSummary({
             id: 2,
             name: 'Esplanadi Park',
-            city: 'helsinki',
             type: 'street',
-            status: 'active',
             hourlyRateEur: 3.5,
             latitude: 60.167,
             longitude: 24.9475,
-          },
+            openingHours: {
+              weekdays: '08:00-21:00',
+              weekends: '10:00-18:00',
+            },
+          }),
         ]),
       )
       .mockResolvedValueOnce(
         createZonesPage([
-          {
+          createZoneSummary({
             id: 2,
             name: 'Esplanadi Park',
-            city: 'helsinki',
             type: 'street',
-            status: 'active',
             hourlyRateEur: 3.5,
             latitude: 60.167,
             longitude: 24.9475,
-          },
+            openingHours: {
+              weekdays: '08:00-21:00',
+              weekends: '10:00-18:00',
+            },
+          }),
         ]),
       )
 
@@ -202,30 +211,19 @@ describe('ZonesListView', () => {
     fetchZonesMock
       .mockResolvedValueOnce(
         createZonesPage([
-          {
-            id: 1,
-            name: 'Kamppi Center',
-            city: 'helsinki',
-            type: 'commercial',
-            status: 'active',
-            hourlyRateEur: 4.5,
-            latitude: 60.1685,
-            longitude: 24.9318,
-          },
+          createZoneSummary(),
         ]),
       )
       .mockResolvedValueOnce(
         createZonesPage([
-          {
+          createZoneSummary({
             id: 8,
             name: 'Sello Parkki',
             city: 'espoo',
-            type: 'commercial',
-            status: 'active',
             hourlyRateEur: 3.1,
             latitude: 60.2189,
             longitude: 24.8127,
-          },
+          }),
         ]),
       )
 
@@ -258,16 +256,14 @@ describe('ZonesListView', () => {
       .mockReturnValueOnce(firstRequest.promise)
       .mockResolvedValueOnce(
         createZonesPage([
-          {
+          createZoneSummary({
             id: 8,
             name: 'Sello Parkki',
             city: 'espoo',
-            type: 'commercial',
-            status: 'active',
             hourlyRateEur: 3.1,
             latitude: 60.2189,
             longitude: 24.8127,
-          },
+          }),
         ]),
       )
 
@@ -283,16 +279,7 @@ describe('ZonesListView', () => {
 
     firstRequest.resolve(
       createZonesPage([
-        {
-          id: 1,
-          name: 'Kamppi Center',
-          city: 'helsinki',
-          type: 'commercial',
-          status: 'active',
-          hourlyRateEur: 4.5,
-          latitude: 60.1685,
-          longitude: 24.9318,
-        },
+        createZoneSummary(),
       ]),
     )
     await flushPromises()
@@ -306,46 +293,38 @@ describe('ZonesListView', () => {
       .mockResolvedValueOnce(
         createZonesPage(
           [
-            {
-              id: 1,
-              name: 'Kamppi Center',
-              city: 'helsinki',
-              type: 'commercial',
-              status: 'active',
-              hourlyRateEur: 4.5,
-              latitude: 60.1685,
-              longitude: 24.9318,
-            },
-            {
+            createZoneSummary(),
+            createZoneSummary({
               id: 2,
               name: 'Esplanadi Park',
-              city: 'helsinki',
               type: 'street',
-              status: 'active',
               hourlyRateEur: 3.5,
               latitude: 60.167,
               longitude: 24.9475,
-            },
-            {
+              openingHours: {
+                weekdays: '08:00-21:00',
+                weekends: '10:00-18:00',
+              },
+            }),
+            createZoneSummary({
               id: 3,
               name: 'Pasila Tripla Parking',
-              city: 'helsinki',
-              type: 'commercial',
-              status: 'active',
               hourlyRateEur: 3.2,
               latitude: 60.1989,
               longitude: 24.933,
-            },
-            {
+            }),
+            createZoneSummary({
               id: 4,
               name: 'Hakaniemi Market Square',
-              city: 'helsinki',
               type: 'street',
-              status: 'active',
               hourlyRateEur: 3.4,
               latitude: 60.1788,
               longitude: 24.9506,
-            },
+              openingHours: {
+                weekdays: '07:00-21:00',
+                weekends: '08:00-18:00',
+              },
+            }),
           ],
           { total: 5, page: 1, limit: 4 },
         ),
@@ -353,16 +332,18 @@ describe('ZonesListView', () => {
       .mockResolvedValueOnce(
         createZonesPage(
           [
-            {
+            createZoneSummary({
               id: 5,
               name: 'Herttoniemi Center Parking',
-              city: 'helsinki',
-              type: 'commercial',
               status: 'inactive',
               hourlyRateEur: 2.4,
               latitude: 60.1942,
               longitude: 25.0285,
-            },
+              openingHours: {
+                weekdays: 'Closed',
+                weekends: 'Closed',
+              },
+            }),
           ],
           { total: 5, page: 2, limit: 4 },
         ),

@@ -1,7 +1,12 @@
 import { mount } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
-import { describe, expect, it } from 'vitest'
+import { ref } from 'vue'
+import { describe, expect, it, vi } from 'vitest'
 import ZoneCard from '@/components/ZoneCard.vue'
+
+vi.mock('@/composables/useCurrentMinute', () => ({
+  useCurrentMinute: () => ref(new Date('2025-01-13T10:00:00+02:00')),
+}))
 
 const DummyView = {
   template: '<div />',
@@ -45,6 +50,10 @@ async function mountZoneCard() {
         hourlyRateEur: 4.5,
         latitude: 60.1685,
         longitude: 24.9318,
+        openingHours: {
+          weekdays: '06:00-23:30',
+          weekends: '08:00-23:30',
+        },
       },
     },
     global: {
@@ -59,7 +68,8 @@ describe('ZoneCard', () => {
 
     expect(wrapper.text()).toContain('Kamppi Center')
     expect(wrapper.text()).toContain('commercial')
-    expect(wrapper.text()).toContain('active')
+    expect(wrapper.text()).toContain('Open now')
+    expect(wrapper.text()).toContain('Closes at 23:30')
     expect(wrapper.text()).toContain('€4.50/hour')
     expect(wrapper.text()).toContain('Open details')
     expect(wrapper.get('a.cta').attributes('aria-label')).toBe('View Zone')
