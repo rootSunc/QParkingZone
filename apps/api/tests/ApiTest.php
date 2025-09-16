@@ -13,9 +13,11 @@ final class ApiTest extends TestCase
 {
     private App $app;
     private ServerRequestFactory $requestFactory;
+    private DateTimeImmutable $currentTime;
 
     protected function setUp(): void
     {
+        $this->currentTime = new DateTimeImmutable('2025-01-13T10:00:00+02:00');
         $pdo = Database::connect('sqlite::memory:');
         Database::initializeSqliteDatabase(
             $pdo,
@@ -25,7 +27,8 @@ final class ApiTest extends TestCase
 
         $this->app = ApplicationFactory::create(
             $pdo,
-            new AppConfig(false, __DIR__ . '/../var/zones.sqlite', true)
+            new AppConfig(false, __DIR__ . '/../var/zones.sqlite', true),
+            $this->currentTime
         );
         $this->requestFactory = new ServerRequestFactory();
     }
@@ -76,6 +79,30 @@ final class ApiTest extends TestCase
         $this->assertCount(1, $data['items']);
         $this->assertSame('Jumbo Retail Park Hall', $data['items'][0]['name']);
         $this->assertSame('vantaa', $data['items'][0]['city']);
+    }
+
+    public function testGetZonesCanFilterOpenNow(): void
+    {
+        $response = $this->request('GET', '/api/zones?city=helsinki&open_now=true');
+        $data = $this->decodeJson($response);
+
+        $this->assertSame(200, $response->getStatusCode());
+        $this->assertSame(4, $data['total']);
+
+        foreach ($data['items'] as $zone) {
+            $this->assertSame('active', $zone['status']);
+        }
+    }
+
+    public function testGetZonesCanSortByDistanceWhenCoordinatesAreProvided(): void
+    {
+        $response = $this->request('GET', '/api/zones?city=helsinki&sort=distance_asc&lat=60.1670&lng=24.9475');
+        $data = $this->decodeJson($response);
+
+        $this->assertSame(200, $response->getStatusCode());
+        $this->assertSame('Esplanadi Park', $data['items'][0]['name']);
+        $this->assertArrayHasKey('distanceKm', $data['items'][0]);
+        $this->assertEquals(0.0, $data['items'][0]['distanceKm']);
     }
 
     public function testGetZoneByIdReturnsContractedDetailPayload(): void
@@ -166,7 +193,8 @@ final class ApiTest extends TestCase
 
         $this->app = ApplicationFactory::create(
             $pdo,
-            new AppConfig(false, __DIR__ . '/../var/zones.sqlite', true)
+            new AppConfig(false, __DIR__ . '/../var/zones.sqlite', true),
+            $this->currentTime
         );
 
         $response = $this->request('GET', '/api/zones/1');

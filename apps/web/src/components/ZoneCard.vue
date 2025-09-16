@@ -57,6 +57,9 @@ function toggleTypeFilter() {
     <p class="availability-copy">
       {{ availability.detail }}
       <span class="availability-hours">{{ availability.schedule }}</span>
+      <span v-if="zone.distanceKm !== undefined" class="availability-distance">
+        {{ zone.distanceKm.toFixed(1) }} km away
+      </span>
     </p>
 
     <div class="meta">
@@ -209,6 +212,18 @@ function toggleTypeFilter() {
   border-radius: 999px;
   background: rgba(18, 18, 18, 0.06);
   color: #6e675d;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.availability-distance {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgba(138, 242, 90, 0.18);
+  color: #315b1f;
   font-size: 12px;
   font-weight: 800;
 }

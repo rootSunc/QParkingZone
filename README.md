@@ -23,6 +23,7 @@ infra/
 - View detailed zone information
 - Search, filter, sort, and paginate zones
 - Live `open now` / `closed now` availability from opening hours
+- Optional geolocation with distance-aware sorting
 - Map view with location pin
 - Shareable URL state for city and catalog filters
 - Responsive UI (mobile + desktop)
@@ -84,7 +85,10 @@ Supported query params:
 - `q=<search text>`
 - `type=<zone type>`
 - `status=active|inactive`
-- `sort=name|price_desc|price_asc`
+- `open_now=true|false`
+- `lat=<latitude>`
+- `lng=<longitude>`
+- `sort=name|price_desc|price_asc|distance_asc`
 - `page=<positive integer>`
 - `limit=<positive integer>`
 
@@ -100,6 +104,7 @@ Supported query params:
       "hourlyRateEur": 4.5,
       "latitude": 60.1685,
       "longitude": 24.9318,
+      "distanceKm": 1.24,
       "openingHours": {
         "weekdays": "00:00-23:59",
         "weekends": "00:00-23:59"
@@ -141,7 +146,7 @@ Frontend tests use **Vitest**.
 
 ```bash
 cd apps/web
-npm run test:unit
+npm run test:run
 ```
 
 Backend tests use **PHPUnit** and run against an in-memory SQLite database.
@@ -176,7 +181,8 @@ Frontend environment variables:
 
 - No authentication
 - No real-time availability or occupancy feed
-- No amenity or distance filtering yet
+- No amenity filtering yet
+- No radius-based distance filter yet
 - `Open now` is computed from static opening-hours data rather than live operator feeds
 - Uses public OpenStreetMap tiles
 - Docker setup is aimed at local development rather than production orchestration
@@ -184,6 +190,6 @@ Frontend environment variables:
 ## Future Improvements
 
 - Real-time availability data
-- Amenity and distance filtering
+- Amenity and radius filtering
 - Backend validation and schema improvements
 - Structured opening-hours rules for `open now` support

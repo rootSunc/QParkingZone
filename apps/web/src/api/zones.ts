@@ -11,6 +11,7 @@ export interface ZoneSummary {
   latitude: number
   longitude: number
   openingHours: OpeningHours
+  distanceKm?: number
 }
 
 export interface OpeningHours {
@@ -36,6 +37,9 @@ export interface FetchZonesParams {
   q?: string
   type?: string | null
   status?: string
+  openNow?: boolean
+  lat?: number | null
+  lng?: number | null
   sort?: ZoneSort
   page?: number
   limit?: number
@@ -51,7 +55,7 @@ async function readJson<T>(response: Response): Promise<T> {
 }
 
 export async function fetchZones(
-  { city, q, type, status, sort, page, limit }: FetchZonesParams,
+  { city, q, type, status, openNow, lat, lng, sort, page, limit }: FetchZonesParams,
   signal?: AbortSignal,
 ): Promise<ZonesPage> {
   const params = new URLSearchParams()
@@ -68,6 +72,15 @@ export async function fetchZones(
 
   if (status) {
     params.set('status', status)
+  }
+
+  if (openNow) {
+    params.set('open_now', 'true')
+  }
+
+  if (lat !== null && lat !== undefined && lng !== null && lng !== undefined) {
+    params.set('lat', String(lat))
+    params.set('lng', String(lng))
   }
 
   if (sort && sort !== 'name') {

@@ -22,6 +22,8 @@ const pageData = ref<ZonesPage>({
 })
 const loading = ref(false)
 const error = ref('')
+const locationError = ref('')
+const locating = ref(false)
 const { selectedCityLabel } = useCitySelection(() => route.query)
 const catalogState = computed(() => parseZoneCatalogQuery(route.query))
 let activeRequestId = 0
@@ -61,6 +63,14 @@ const sortBy = computed<ZoneSort>({
 
 const activeTypeFilter = computed(() => {
   return catalogState.value.type
+})
+
+const openNowOnly = computed(() => {
+  return catalogState.value.openNow
+})
+
+const hasLocation = computed(() => {
+  return catalogState.value.lat !== null && catalogState.value.lng !== null
 })
 
 const activeZones = computed(() => {
@@ -113,6 +123,13 @@ function clearTypeFilter() {
   })
 }
 
+function toggleOpenNow() {
+  replaceCatalogQuery({
+    openNow: !openNowOnly.value,
+    page: 1,
+  })
+}
+
 function scrollToZones() {
   if (typeof document === 'undefined') {
     return
@@ -128,6 +145,51 @@ function replaceCatalogQuery(patch: Partial<ZoneCatalogQueryState>) {
   router.replace({
     query: updateZoneCatalogQuery(route.query, patch),
   })
+}
+
+function clearLocation() {
+  replaceCatalogQuery({
+    lat: null,
+    lng: null,
+    sort: catalogState.value.sort === 'distance_asc' ? 'name' : catalogState.value.sort,
+    page: 1,
+  })
+}
+
+function applyUserLocation(latitude: number, longitude: number) {
+  locationError.value = ''
+  replaceCatalogQuery({
+    lat: latitude,
+    lng: longitude,
+    sort: 'distance_asc',
+    page: 1,
+  })
+}
+
+function locateUser() {
+  if (typeof navigator === 'undefined' || !('geolocation' in navigator)) {
+    locationError.value = 'Geolocation is unavailable in this browser.'
+    return
+  }
+
+  locating.value = true
+  locationError.value = ''
+
+  navigator.geolocation.getCurrentPosition(
+    (position) => {
+      locating.value = false
+      applyUserLocation(position.coords.latitude, position.coords.longitude)
+    },
+    () => {
+      locating.value = false
+      locationError.value = 'Location access was denied.'
+    },
+    {
+      enableHighAccuracy: true,
+      timeout: 8000,
+      maximumAge: 300000,
+    },
+  )
 }
 
 function goToPage(nextPage: number) {
@@ -260,7 +322,7 @@ onUnmounted(() => {
             <div class="phone-pills">
               <span>{{ selectedCityLabel }}</span>
               <span>{{ previewZone?.type ?? 'city parking' }}</span>
-              <span>{{ previewZone?.status ?? 'loading' }}</span>
+              <span>{{ hasLocation && previewZone?.distanceKm !== undefined ? `${previewZone.distanceKm.toFixed(1)} km away` : previewZone?.status ?? 'loading' }}</span>
             </div>
           </div>
         </div>
@@ -292,14 +354,56 @@ onUnmounted(() => {
             <option value="name">Sort by name</option>
             <option value="price_desc">Price: high to low</option>
             <option value="price_asc">Price: low to high</option>
+            <option value="distance_asc" :disabled="!hasLocation">Distance: nearest first</option>
           </select>
         </label>
       </div>
 
-      <div v-if="activeTypeFilter" class="active-filters">
-        <span class="active-filters-label">Filtered by type</span>
-        <button type="button" class="active-filter-chip" @click="clearTypeFilter">
+      <div class="catalog-actions">
+        <button
+          type="button"
+          class="catalog-chip"
+          :class="{ 'catalog-chip-active': openNowOnly }"
+          :aria-pressed="openNowOnly ? 'true' : 'false'"
+          @click="toggleOpenNow"
+        >
+          Open now
+        </button>
+
+        <button
+          v-if="!hasLocation"
+          type="button"
+          class="catalog-chip catalog-chip-ghost"
+          :disabled="locating"
+          @click="locateUser"
+        >
+          {{ locating ? 'Locating…' : 'Use my location' }}
+        </button>
+
+        <button
+          v-else
+          type="button"
+          class="catalog-chip catalog-chip-ghost"
+          @click="clearLocation"
+        >
+          Clear location
+        </button>
+
+        <span v-if="hasLocation" class="catalog-inline-note">Distance is now available in the list.</span>
+      </div>
+
+      <p v-if="locationError" class="catalog-feedback">{{ locationError }}</p>
+
+      <div v-if="activeTypeFilter || openNowOnly || hasLocation" class="active-filters">
+        <span class="active-filters-label">Active filters</span>
+        <button v-if="activeTypeFilter" type="button" class="active-filter-chip" @click="clearTypeFilter">
           {{ activeTypeFilter }} ×
+        </button>
+        <button v-if="openNowOnly" type="button" class="active-filter-chip" @click="toggleOpenNow">
+          open now ×
+        </button>
+        <button v-if="hasLocation" type="button" class="active-filter-chip" @click="clearLocation">
+          nearby ×
         </button>
       </div>
 
@@ -717,6 +821,67 @@ onUnmounted(() => {
   margin-top: 28px;
 }
 
+.catalog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.catalog-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0 16px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: rgba(138, 242, 90, 0.14);
+  color: white;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  transition:
+    transform 0.18s ease,
+    border-color 0.18s ease,
+    background 0.18s ease,
+    opacity 0.18s ease;
+}
+
+.catalog-chip:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: rgba(138, 242, 90, 0.4);
+}
+
+.catalog-chip:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.catalog-chip-active {
+  background: var(--accent);
+  color: var(--surface-dark);
+}
+
+.catalog-chip-ghost {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.catalog-inline-note,
+.catalog-feedback {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.catalog-feedback {
+  margin-top: 10px;
+  color: #fecaca;
+}
+
 .field {
   display: flex;
   flex: 1 1 280px;
@@ -963,7 +1128,8 @@ onUnmounted(() => {
   }
 
   .active-filters,
-  .type-hints {
+  .type-hints,
+  .catalog-actions {
     align-items: flex-start;
   }
 

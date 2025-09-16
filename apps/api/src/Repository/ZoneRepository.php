@@ -3,13 +3,19 @@ declare(strict_types=1);
 
 namespace ParkingZones\Repository;
 
+use DateTimeImmutable;
+use DateTimeZone;
 use PDO;
-use PDOStatement;
 use RuntimeException;
 
 final class ZoneRepository
 {
-    public function __construct(private readonly PDO $pdo)
+    private const ZONE_TIME_ZONE = 'Europe/Helsinki';
+
+    public function __construct(
+        private readonly PDO $pdo,
+        private readonly ?DateTimeImmutable $currentTime = null
+    )
     {
     }
 
@@ -19,6 +25,9 @@ final class ZoneRepository
         ?string $type = null,
         ?string $status = null,
         string $sort = 'name',
+        bool $openNow = false,
+        ?float $latitude = null,
+        ?float $longitude = null,
         int $page = 1,
         int $limit = 20
     ): array
@@ -38,26 +47,44 @@ final class ZoneRepository
                 opening_hours AS openingHours
             FROM zones
             {$whereClause}
-            ORDER BY {$this->resolveSummarySort($sort)}
-            LIMIT :limit OFFSET :offset
         ");
 
-        $this->bindSummaryFilterParams($stmt, $params);
-        $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
-        $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
-        $stmt->execute();
+        foreach ($params as $name => $value) {
+            $stmt->bindValue(':' . $name, $value, PDO::PARAM_STR);
+        }
 
+        $stmt->execute();
         $items = $stmt->fetchAll();
 
         foreach ($items as &$item) {
             $item['openingHours'] = $this->decodeOpeningHours($item['openingHours']);
+
+            if ($latitude !== null && $longitude !== null) {
+                $item['distanceKm'] = round(
+                    $this->calculateDistanceKm(
+                        $latitude,
+                        $longitude,
+                        (float) $item['latitude'],
+                        (float) $item['longitude']
+                    ),
+                    2
+                );
+            }
         }
 
         unset($item);
 
+        if ($openNow) {
+            $items = array_values(array_filter($items, fn (array $item): bool => $this->isZoneOpenNow($item)));
+        }
+
+        $this->sortSummaries($items, $sort, $latitude, $longitude);
+        $total = count($items);
+        $items = array_slice($items, $offset, $limit);
+
         return [
             'items' => $items,
-            'total' => $this->countSummaries($whereClause, $params),
+            'total' => $total,
             'page' => $page,
             'limit' => $limit,
         ];
@@ -165,32 +192,173 @@ final class ZoneRepository
         ];
     }
 
-    private function countSummaries(string $whereClause, array $params): int
+    private function isZoneOpenNow(array $zone): bool
     {
-        $stmt = $this->pdo->prepare("
-            SELECT COUNT(*)
-            FROM zones
-            {$whereClause}
-        ");
-        $this->bindSummaryFilterParams($stmt, $params);
-        $stmt->execute();
-
-        return (int) $stmt->fetchColumn();
-    }
-
-    private function bindSummaryFilterParams(PDOStatement $stmt, array $params): void
-    {
-        foreach ($params as $name => $value) {
-            $stmt->bindValue(':' . $name, $value, PDO::PARAM_STR);
+        if (($zone['status'] ?? null) !== 'active') {
+            return false;
         }
+
+        $openingHours = $zone['openingHours'] ?? null;
+
+        if (!is_array($openingHours)) {
+            return false;
+        }
+
+        $clock = $this->getZoneClock();
+        $ranges = $this->buildRelativeRanges($openingHours, $clock['day']);
+
+        foreach ($ranges as $range) {
+            if ($range['start'] <= $clock['minutes'] && $clock['minutes'] < $range['end']) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
-    private function resolveSummarySort(string $sort): string
+    private function sortSummaries(array &$items, string $sort, ?float $latitude, ?float $longitude): void
     {
-        return match ($sort) {
-            'price_asc' => 'hourly_rate_eur ASC, name ASC',
-            'price_desc' => 'hourly_rate_eur DESC, name ASC',
-            default => 'name ASC',
-        };
+        usort($items, function (array $left, array $right) use ($sort, $latitude, $longitude): int {
+            return match ($sort) {
+                'price_asc' => $this->compareNumbers(
+                    (float) $left['hourlyRateEur'],
+                    (float) $right['hourlyRateEur'],
+                    (string) $left['name'],
+                    (string) $right['name']
+                ),
+                'price_desc' => $this->compareNumbers(
+                    (float) $right['hourlyRateEur'],
+                    (float) $left['hourlyRateEur'],
+                    (string) $left['name'],
+                    (string) $right['name']
+                ),
+                'distance_asc' => $this->compareNumbers(
+                    $this->resolveDistanceForSort($left, $latitude, $longitude),
+                    $this->resolveDistanceForSort($right, $latitude, $longitude),
+                    (string) $left['name'],
+                    (string) $right['name']
+                ),
+                default => strcmp((string) $left['name'], (string) $right['name']),
+            };
+        });
+    }
+
+    private function compareNumbers(float $left, float $right, string $leftName, string $rightName): int
+    {
+        $comparison = $left <=> $right;
+
+        return $comparison !== 0 ? $comparison : strcmp($leftName, $rightName);
+    }
+
+    private function resolveDistanceForSort(array $item, ?float $latitude, ?float $longitude): float
+    {
+        if ($latitude === null || $longitude === null) {
+            return INF;
+        }
+
+        return isset($item['distanceKm']) ? (float) $item['distanceKm'] : INF;
+    }
+
+    private function calculateDistanceKm(float $lat1, float $lng1, float $lat2, float $lng2): float
+    {
+        $earthRadiusKm = 6371.0;
+        $deltaLat = deg2rad($lat2 - $lat1);
+        $deltaLng = deg2rad($lng2 - $lng1);
+        $startLat = deg2rad($lat1);
+        $endLat = deg2rad($lat2);
+        $a = sin($deltaLat / 2) ** 2
+            + cos($startLat) * cos($endLat) * sin($deltaLng / 2) ** 2;
+
+        return $earthRadiusKm * 2 * asin(min(1.0, sqrt($a)));
+    }
+
+    private function getZoneClock(): array
+    {
+        $now = ($this->currentTime ?? new DateTimeImmutable('now'))
+            ->setTimezone(new DateTimeZone(self::ZONE_TIME_ZONE));
+
+        return [
+            'day' => (int) $now->format('w'),
+            'minutes' => ((int) $now->format('G') * 60) + (int) $now->format('i'),
+        ];
+    }
+
+    private function buildRelativeRanges(array $openingHours, int $day): array
+    {
+        $previousDay = ($day + 6) % 7;
+        $nextDay = ($day + 1) % 7;
+        $ranges = [];
+
+        foreach ($this->parseSchedule($openingHours[$this->getScheduleKey($previousDay)] ?? '') as $range) {
+            if ($range['wraps']) {
+                $ranges[] = [
+                    'start' => $range['start'] - 1440,
+                    'end' => $range['end'],
+                ];
+            }
+        }
+
+        foreach ($this->parseSchedule($openingHours[$this->getScheduleKey($day)] ?? '') as $range) {
+            $ranges[] = [
+                'start' => $range['start'],
+                'end' => $range['wraps'] ? 1440 + $range['end'] : $range['end'],
+            ];
+        }
+
+        foreach ($this->parseSchedule($openingHours[$this->getScheduleKey($nextDay)] ?? '') as $range) {
+            $ranges[] = [
+                'start' => 1440 + $range['start'],
+                'end' => $range['wraps'] ? 2880 + $range['end'] : 1440 + $range['end'],
+            ];
+        }
+
+        usort($ranges, fn (array $left, array $right): int => $left['start'] <=> $right['start']);
+
+        return $ranges;
+    }
+
+    private function parseSchedule(string $schedule): array
+    {
+        $normalized = strtolower(trim($schedule));
+
+        if ($normalized === '' || $normalized === 'closed') {
+            return [];
+        }
+
+        $ranges = [];
+
+        foreach (explode(',', $schedule) as $segment) {
+            $match = [];
+
+            if (!preg_match('/^(\d{2}):(\d{2})-(\d{2}):(\d{2})$/', trim($segment), $match)) {
+                continue;
+            }
+
+            $start = ((int) $match[1] * 60) + (int) $match[2];
+            $end = ((int) $match[3] * 60) + (int) $match[4];
+
+            if ($start === $end) {
+                $ranges[] = [
+                    'start' => $start,
+                    'end' => 1440,
+                    'wraps' => false,
+                ];
+
+                continue;
+            }
+
+            $ranges[] = [
+                'start' => $start,
+                'end' => $end,
+                'wraps' => $end < $start,
+            ];
+        }
+
+        return $ranges;
+    }
+
+    private function getScheduleKey(int $day): string
+    {
+        return in_array($day, [0, 6], true) ? 'weekends' : 'weekdays';
     }
 }

@@ -8,6 +8,7 @@ use ParkingZones\Http\JsonErrorHandler;
 use ParkingZones\Http\JsonResponder;
 use ParkingZones\Infrastructure\Database;
 use ParkingZones\Repository\ZoneRepository;
+use DateTimeImmutable;
 use PDO;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
@@ -18,7 +19,11 @@ final class ApplicationFactory
 {
     private const MAX_PAGE_SIZE = 100;
 
-    public static function create(?PDO $pdo = null, ?AppConfig $config = null): App
+    public static function create(
+        ?PDO $pdo = null,
+        ?AppConfig $config = null,
+        ?DateTimeImmutable $currentTime = null
+    ): App
     {
         $config ??= AppConfig::fromEnvironment();
 
@@ -30,7 +35,8 @@ final class ApplicationFactory
         );
 
         $repository = new ZoneRepository(
-            $pdo ?? Database::sqliteFile($config->databasePath, $config->autoSeed)
+            $pdo ?? Database::sqliteFile($config->databasePath, $config->autoSeed),
+            $currentTime
         );
 
         $app->get('/api/zones', function (Request $request, Response $response) use ($repository, $responder): Response {
@@ -44,6 +50,9 @@ final class ApplicationFactory
                     self::readNormalizedString($queryParams['type'] ?? null),
                     self::readNormalizedString($queryParams['status'] ?? null),
                     self::readSummarySort($queryParams['sort'] ?? null),
+                    self::readBoolean($queryParams['open_now'] ?? null, false),
+                    self::readCoordinate($queryParams['lat'] ?? null, -90.0, 90.0),
+                    self::readCoordinate($queryParams['lng'] ?? null, -180.0, 180.0),
                     self::readPositiveInteger($queryParams['page'] ?? null, 1),
                     self::readPositiveInteger($queryParams['limit'] ?? null, 20, self::MAX_PAGE_SIZE)
                 )
@@ -81,9 +90,33 @@ final class ApplicationFactory
         }
 
         return match (trim($value)) {
-            'price_asc', 'price_desc', 'name' => trim($value),
+            'price_asc', 'price_desc', 'distance_asc', 'name' => trim($value),
             default => 'name',
         };
+    }
+
+    private static function readBoolean(mixed $value, bool $default): bool
+    {
+        if (!is_string($value) && !is_bool($value) && !is_int($value)) {
+            return $default;
+        }
+
+        return filter_var($value, FILTER_VALIDATE_BOOL, FILTER_NULL_ON_FAILURE) ?? $default;
+    }
+
+    private static function readCoordinate(mixed $value, float $minimum, float $maximum): ?float
+    {
+        if (!is_string($value) && !is_float($value) && !is_int($value)) {
+            return null;
+        }
+
+        $coordinate = filter_var($value, FILTER_VALIDATE_FLOAT, FILTER_NULL_ON_FAILURE);
+
+        if ($coordinate === null || $coordinate < $minimum || $coordinate > $maximum) {
+            return null;
+        }
+
+        return (float) $coordinate;
     }
 
     private static function readPositiveInteger(mixed $value, int $default, ?int $maximum = null): int
