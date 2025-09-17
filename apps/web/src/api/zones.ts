@@ -40,6 +40,8 @@ export interface FetchZonesParams {
   openNow?: boolean
   lat?: number | null
   lng?: number | null
+  radius?: number | null
+  amenities?: string[]
   sort?: ZoneSort
   page?: number
   limit?: number
@@ -55,7 +57,7 @@ async function readJson<T>(response: Response): Promise<T> {
 }
 
 export async function fetchZones(
-  { city, q, type, status, openNow, lat, lng, sort, page, limit }: FetchZonesParams,
+  { city, q, type, status, openNow, lat, lng, radius, amenities, sort, page, limit }: FetchZonesParams,
   signal?: AbortSignal,
 ): Promise<ZonesPage> {
   const params = new URLSearchParams()
@@ -81,6 +83,14 @@ export async function fetchZones(
   if (lat !== null && lat !== undefined && lng !== null && lng !== undefined) {
     params.set('lat', String(lat))
     params.set('lng', String(lng))
+  }
+
+  if (radius !== null && radius !== undefined) {
+    params.set('radius', String(radius))
+  }
+
+  if (amenities && amenities.length > 0) {
+    params.set('amenities', amenities.join(','))
   }
 
   if (sort && sort !== 'name') {

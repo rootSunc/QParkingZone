@@ -69,13 +69,38 @@ const openNowOnly = computed(() => {
   return catalogState.value.openNow
 })
 
+const radius = computed({
+  get() {
+    return catalogState.value.radius
+  },
+  set(value) {
+    replaceCatalogQuery({
+      radius: value,
+      page: 1,
+    })
+  },
+})
+
+const activeAmenities = computed(() => {
+  return catalogState.value.amenities
+})
+
+const ALL_AMENITIES = [
+  'Ticket Machine',
+  'Indoor Parking',
+  'Retail Validation',
+  'Paved Surface',
+  'Park and Ride Access',
+  'Train Station Nearby',
+  'EV Charging',
+  'Security Cameras'
+]
+
 const hasLocation = computed(() => {
   return catalogState.value.lat !== null && catalogState.value.lng !== null
 })
 
-const activeZones = computed(() => {
-  return zones.value.filter((zone) => zone.status === 'active').length
-})
+
 
 const totalPages = computed(() => {
   if (pageData.value.total === 0) {
@@ -126,6 +151,27 @@ function clearTypeFilter() {
 function toggleOpenNow() {
   replaceCatalogQuery({
     openNow: !openNowOnly.value,
+    page: 1,
+  })
+}
+
+function toggleAmenity(amenity: string) {
+  const current = new Set(activeAmenities.value)
+  if (current.has(amenity)) {
+    current.delete(amenity)
+  } else {
+    current.add(amenity)
+  }
+  
+  replaceCatalogQuery({
+    amenities: Array.from(current),
+    page: 1,
+  })
+}
+
+function clearAmenities() {
+  replaceCatalogQuery({
+    amenities: [],
     page: 1,
   })
 }
@@ -357,6 +403,17 @@ onUnmounted(() => {
             <option value="distance_asc" :disabled="!hasLocation">Distance: nearest first</option>
           </select>
         </label>
+
+        <label v-if="hasLocation" class="field field-small">
+          <span>Radius</span>
+          <select v-model="radius" class="select">
+            <option :value="null">Any distance</option>
+            <option :value="1.0">Within 1 km</option>
+            <option :value="2.5">Within 2.5 km</option>
+            <option :value="5.0">Within 5 km</option>
+            <option :value="10.0">Within 10 km</option>
+          </select>
+        </label>
       </div>
 
       <div class="catalog-actions">
@@ -394,7 +451,7 @@ onUnmounted(() => {
 
       <p v-if="locationError" class="catalog-feedback">{{ locationError }}</p>
 
-      <div v-if="activeTypeFilter || openNowOnly || hasLocation" class="active-filters">
+      <div v-if="activeTypeFilter || openNowOnly || hasLocation || activeAmenities.length > 0" class="active-filters">
         <span class="active-filters-label">Active filters</span>
         <button v-if="activeTypeFilter" type="button" class="active-filter-chip" @click="clearTypeFilter">
           {{ activeTypeFilter }} ×
@@ -405,18 +462,45 @@ onUnmounted(() => {
         <button v-if="hasLocation" type="button" class="active-filter-chip" @click="clearLocation">
           nearby ×
         </button>
+        <button
+          v-for="amenity in activeAmenities"
+          :key="amenity"
+          type="button"
+          class="active-filter-chip"
+          @click="toggleAmenity(amenity)"
+        >
+          {{ amenity }} ×
+        </button>
+        <button v-if="activeAmenities.length > 1" type="button" class="active-filter-chip active-filter-chip-clear" @click="clearAmenities">
+          clear amenities
+        </button>
       </div>
 
-      <div v-else class="type-hints">
-        <span class="type-hints-label">Quick filters</span>
+      <div class="type-hints">
+        <span class="type-hints-label">Zone Types</span>
         <button
           v-for="type in availableTypes"
           :key="type"
           type="button"
           class="type-hint-chip"
+          :class="{ 'type-hint-chip-active': type === activeTypeFilter }"
           @click="toggleTypeFilter(type)"
         >
           {{ type }}
+        </button>
+      </div>
+
+      <div class="type-hints" style="margin-top: 14px;">
+        <span class="type-hints-label">Amenities</span>
+        <button
+          v-for="amenity in ALL_AMENITIES"
+          :key="amenity"
+          type="button"
+          class="type-hint-chip"
+          :class="{ 'type-hint-chip-active': activeAmenities.includes(amenity) }"
+          @click="toggleAmenity(amenity)"
+        >
+          {{ amenity }}
         </button>
       </div>
 
@@ -439,7 +523,6 @@ onUnmounted(() => {
       <div v-if="!loading && !error && pageData.total > 0" class="pagination">
         <p class="pagination-summary">
           {{ currentRange }}
-          <span class="pagination-active">{{ activeZones }} active on this page</span>
         </p>
 
         <div class="pagination-actions">

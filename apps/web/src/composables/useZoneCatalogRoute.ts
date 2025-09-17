@@ -1,7 +1,7 @@
 import type { LocationQuery, LocationQueryRaw, LocationQueryValue } from 'vue-router'
 import { defaultCitySlug, isCitySlug, type CitySlug } from '@/config/cities'
 
-export const defaultZonePageSize = 4
+export const defaultZonePageSize = 12
 export const zoneSortOptions = ['name', 'price_desc', 'price_asc', 'distance_asc'] as const
 
 export type ZoneSort = (typeof zoneSortOptions)[number]
@@ -13,12 +13,14 @@ export interface ZoneCatalogQueryState {
   openNow: boolean
   lat: number | null
   lng: number | null
+  radius: number | null
+  amenities: string[]
   sort: ZoneSort
   page: number
   limit: number
 }
 
-const zoneCatalogKeys = new Set(['city', 'q', 'type', 'open_now', 'lat', 'lng', 'sort', 'page', 'limit'])
+const zoneCatalogKeys = new Set(['city', 'q', 'type', 'open_now', 'lat', 'lng', 'radius', 'amenities', 'sort', 'page', 'limit'])
 
 function readQueryValue(value: LocationQueryValue | LocationQueryValue[] | undefined): string | null {
   if (Array.isArray(value)) {
@@ -60,6 +62,14 @@ function formatCoordinate(value: number): string {
   return value.toFixed(5)
 }
 
+function readArrayString(value: LocationQueryValue | LocationQueryValue[] | undefined): string[] {
+  if (!value) return [];
+  if (Array.isArray(value)) {
+    return value.map(v => String(v)).filter(Boolean);
+  }
+  return String(value).split(',').map(s => s.trim()).filter(Boolean);
+}
+
 export function parseZoneCatalogQuery(query: LocationQuery): ZoneCatalogQueryState {
   const cityValue = readQueryValue(query.city)
   const sortValue = readQueryValue(query.sort)
@@ -68,6 +78,8 @@ export function parseZoneCatalogQuery(query: LocationQuery): ZoneCatalogQuerySta
   const openNow = readBoolean(readQueryValue(query.open_now))
   const lat = readCoordinate(readQueryValue(query.lat))
   const lng = readCoordinate(readQueryValue(query.lng))
+  const radius = readCoordinate(readQueryValue(query.radius))
+  const amenities = readArrayString(query.amenities)
   const hasCoordinates = lat !== null && lng !== null
   const page = readPositiveInteger(readQueryValue(query.page), 1)
   const limit = readPositiveInteger(readQueryValue(query.limit), defaultZonePageSize)
@@ -80,6 +92,8 @@ export function parseZoneCatalogQuery(query: LocationQuery): ZoneCatalogQuerySta
     openNow,
     lat: hasCoordinates ? lat : null,
     lng: hasCoordinates ? lng : null,
+    radius: hasCoordinates && radius !== null ? radius : null,
+    amenities,
     sort: parsedSort === 'distance_asc' && !hasCoordinates ? 'name' : parsedSort,
     page,
     limit,
@@ -121,6 +135,14 @@ export function updateZoneCatalogQuery(
   if (nextState.lat !== null && nextState.lng !== null) {
     nextQuery.lat = formatCoordinate(nextState.lat)
     nextQuery.lng = formatCoordinate(nextState.lng)
+  }
+
+  if (nextState.radius !== null) {
+    nextQuery.radius = String(nextState.radius)
+  }
+
+  if (nextState.amenities.length > 0) {
+    nextQuery.amenities = nextState.amenities.join(',')
   }
 
   if (nextSort !== 'name') {

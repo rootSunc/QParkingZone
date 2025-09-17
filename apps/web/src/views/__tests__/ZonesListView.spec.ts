@@ -37,7 +37,7 @@ function createZonesPage(items: ZonesPage['items'], overrides: Partial<ZonesPage
     items,
     total: items.length,
     page: 1,
-    limit: 4,
+    limit: 12,
     ...overrides,
   }
 }
@@ -119,7 +119,7 @@ describe('ZonesListView', () => {
         lng: null,
         sort: 'name',
         page: 1,
-        limit: 4,
+        limit: 12,
       }),
       expect.any(AbortSignal),
     )
@@ -360,7 +360,7 @@ describe('ZonesListView', () => {
               },
             }),
           ],
-          { total: 5, page: 1, limit: 4 },
+          { total: 5, page: 1, limit: 12 },
         ),
       )
       .mockResolvedValueOnce(
@@ -379,7 +379,7 @@ describe('ZonesListView', () => {
               },
             }),
           ],
-          { total: 5, page: 2, limit: 4 },
+          { total: 5, page: 2, limit: 12 },
         ),
       )
 

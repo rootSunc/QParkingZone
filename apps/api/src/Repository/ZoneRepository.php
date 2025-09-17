@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace ParkingZones\Repository;
 
+
 use DateTimeImmutable;
 use DateTimeZone;
 use PDO;
@@ -28,6 +29,8 @@ final class ZoneRepository
         bool $openNow = false,
         ?float $latitude = null,
         ?float $longitude = null,
+        ?float $radius = null,
+        ?array $amenities = null,
         int $page = 1,
         int $limit = 20
     ): array
@@ -44,6 +47,7 @@ final class ZoneRepository
                 hourly_rate_eur AS hourlyRateEur,
                 latitude,
                 longitude,
+                amenities,
                 opening_hours AS openingHours
             FROM zones
             {$whereClause}
@@ -70,6 +74,8 @@ final class ZoneRepository
                     2
                 );
             }
+            
+            $item['amenities'] = $this->decodeAmenities($item['amenities']);
         }
 
         unset($item);
@@ -78,9 +84,25 @@ final class ZoneRepository
             $items = array_values(array_filter($items, fn (array $item): bool => $this->isZoneOpenNow($item)));
         }
 
+        if ($radius !== null && $latitude !== null && $longitude !== null) {
+            $items = array_values(array_filter($items, fn (array $item): bool => isset($item['distanceKm']) && $item['distanceKm'] <= $radius));
+        }
+
+        if ($amenities !== null && count($amenities) > 0) {
+            $items = array_values(array_filter($items, function (array $item) use ($amenities): bool {
+                $itemAmenities = $item['amenities'] ?? [];
+                // Check if all requested amenities are present using array intersection
+                return count(array_intersect($amenities, $itemAmenities)) === count($amenities);
+            }));
+        }
+
+        // We can unset amenities to not bloat the summary API response, optionally. We'll leave it in for the UI to use if needed.
+
         $this->sortSummaries($items, $sort, $latitude, $longitude);
         $total = count($items);
         $items = array_slice($items, $offset, $limit);
+
+
 
         return [
             'items' => $items,
@@ -119,6 +141,8 @@ final class ZoneRepository
 
         $zone['amenities'] = $this->decodeAmenities($zone['amenities']);
         $zone['openingHours'] = $this->decodeOpeningHours($zone['openingHours']);
+
+
 
         return $zone;
     }
