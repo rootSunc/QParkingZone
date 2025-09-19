@@ -1,53 +1,92 @@
 # QParking Zones
 
-QParking Zones is a lightweight full-stack demo for exploring parking zones across Helsinki, Espoo, and Vantaa. The frontend is a Vue 3 single-page application, the backend is a Slim 4 JSON API, and the data layer is SQLite with seeded sample data by default.
+## 1. Project Overview
 
-The repository is set up for local development, demos, and small self-hosted deployments. It is intentionally simple and not positioned as a production-hardened parking platform.
+QParking Zones is a full-stack project for exploring parking data across the Helsinki metropolitan area. The goal of this project is to detect and expose parking area data for the Helsinki metropolitan region and provide a simple parking search experience for end users:
 
-## What the project actually does
+- Coverage across `Helsinki`, `Espoo`, and `Vantaa`
+- Nearby parking discovery based on the user's current location
+- Filtering by price, status, amenities, and distance
+- Dedicated parking detail pages with map support
 
-- Browse parking zones by city.
-- Search zones by name.
-- Filter the catalog by zone type, amenities, and `open now`.
-- Use browser geolocation to sort by nearest zone and optionally limit results by radius.
-- Keep catalog state in the URL query string so links are shareable.
-- Open a detail page with pricing, capacity, opening hours, amenities, coordinates, and an embedded Leaflet map.
-- Serve the same data through a small JSON API with frontend and backend tests.
+At the moment, the project focuses on parking facilities and parking zones, not real-time free-space availability. The codebase already contains configuration placeholders for live availability providers, but those integrations are not yet exposed through the public API routes.
 
-## Current scope
+## 2. Core Features and Real Data Sources
 
-- The default dataset is seeded demo data stored in SQLite.
-- There is no authentication, reservation flow, payment flow, or admin UI.
-- There is no list-page map view; the interactive map exists on the zone detail page only.
-- Live occupancy or external availability integrations are not wired into the current API routes.
+### Core Features
 
-## Stack
+- Browse parking zones by city
+- Search zones by name
+- Filter by `type`, `amenities`, and `open now`
+- Sort by distance after geolocation is granted, with optional radius filtering
+- View zone details including pricing, capacity, opening hours, amenities, and coordinates
+- Show an embedded `Leaflet + OpenStreetMap` map on the detail page
+- Persist catalog filters in the URL so results are shareable
+- Provide both frontend and backend test coverage for development and regression checks
 
-- Frontend: Vue 3, TypeScript, Vite, Vue Router, Leaflet
-- Backend: PHP 8.3, Slim 4, SQLite
-- Infra: Docker, Docker Compose, Nginx, optional Caddy for HTTPS
+### Where the Real Data Comes From
 
-## Repository layout
+The repository currently works with two kinds of data:
+
+- Default development data from `apps/api/database/seed.sql`
+- Real parking data imported by `apps/api/scripts/import-zones.php` from `OpenStreetMap + Overpass API` for the Helsinki, Espoo, and Vantaa region, then stored locally in `SQLite`
+
+### Free Ways to Access Real Parking Data
+
+Based on the current repository implementation and configuration, there are two practical free data-access approaches:
+
+- `OpenStreetMap + Overpass API`
+  - Already implemented in this project
+  - Suitable for retrieving parking locations, names, capacities, and selected tag metadata
+- Public city or operator APIs
+  - The repository already includes placeholder configuration for `Parkkiopas/Parkkihubi` and `Fintraffic/LIIPI`
+  - These are not yet connected to the public API routes, but they represent the next likely integration path
+
+
+## 3. Tech Stack
+
+- Frontend: `Vue 3`, `TypeScript`, `Vite`, `Vue Router`, `Leaflet`
+- Backend: `PHP 8.3`, `Slim 4`, `PDO`, `SQLite`
+- Testing: `Vitest`, `Vue Test Utils`, `PHPUnit`
+- Deployment: `Docker`, `Docker Compose`, `Nginx`
+- HTTPS: `Caddy`
+
+## 4. Project Structure
 
 ```text
 apps/
-  api/         PHP API, SQLite schema/seed, scripts, PHPUnit tests
-  web/         Vue app, API client, Vitest tests
+  api/
+    database/             SQLite schema and seed data
+    public/               PHP entrypoint
+    scripts/              Database init and real-data import scripts
+    src/                  Slim app, config, and repository layer
+    tests/                PHPUnit tests
+    var/                  Default SQLite database location
+  web/
+    src/
+      api/                Frontend API client
+      components/         UI components
+      composables/        Route and state logic
+      views/              List and detail pages
+      utils/              Utility helpers such as opening-hours logic
+    public/               Static assets
+    vite.config.ts        Vite config
+    vitest.config.ts      Vitest config
 infra/
-  caddy/       HTTPS reverse-proxy config
-  docker/      Dockerfiles, Compose files, deployment notes
+  caddy/                  HTTPS reverse-proxy config
+  docker/                 Dockerfiles and Compose files
 ```
 
-## Quick start
+## 5. Local Development and Production Deployment
 
-### Local development without Docker
+### Option 1: Run Locally Without Docker
 
 Requirements:
 
-- PHP 8.3+
-- Composer
-- Node.js 20+
-- npm
+- `PHP 8.3+`
+- `Composer`
+- `Node.js 20+`
+- `npm`
 
 Start the backend:
 
@@ -63,37 +102,38 @@ Start the frontend:
 ```bash
 cd apps/web
 npm install
+cp .env.example .env
 npm run dev
 ```
 
-Optional frontend env file:
-
-```bash
-cd apps/web
-cp .env.example .env
-```
-
-Default local URLs:
+Default URLs:
 
 - Frontend: `http://localhost:5173/#/`
 - API: `http://localhost:8000/api/zones`
 
-`VITE_API_BASE_URL` is only used by the Vite dev server proxy. If your backend is not running on `http://localhost:8000`, update `apps/web/.env`.
+If you want to replace the seed data with real parking data:
 
-### Local development with Docker
+```bash
+cd apps/api
+php scripts/import-zones.php
+```
+
+### Option 2: Run with Docker
 
 ```bash
 docker compose -f infra/docker/docker-compose.yml up --build
 ```
 
-Docker URLs:
+Default URLs:
 
 - Frontend: `http://localhost:5173/#/`
 - API: `http://localhost:8000/api/zones`
 
-This Compose setup builds the frontend into static assets and serves them with Nginx. For hot reload and faster UI iteration, use the non-Docker workflow above.
+This option is useful for bringing up the full stack quickly. For frontend hot reload and faster UI iteration, the non-Docker workflow is usually better.
 
-### Production-style Docker run
+### Production Deployment
+
+Use the production-style Compose stack:
 
 ```bash
 docker compose -f infra/docker/docker-compose.prod.yml up -d --build
@@ -103,24 +143,28 @@ Default URL:
 
 - Frontend: `http://localhost/#/`
 
-The production Compose file keeps the backend private inside Docker and stores SQLite in a named volume.
+Notes:
 
-### HTTPS deployment with a real domain
+- The frontend is built into static assets and served by `Nginx`
+- The backend stays private inside the Docker network
+- `SQLite` data is stored in a named Docker volume
+
+### HTTPS Deployment
+
+If you have a real domain, use the `Caddy`-based HTTPS setup:
 
 ```bash
 cp infra/docker/.env.https.example infra/docker/.env.https
 ```
 
-Set the real domain values in `infra/docker/.env.https`:
+Edit `infra/docker/.env.https`:
 
 ```bash
 DOMAIN=example.com
-WWW_DOMAIN=www.example.com
+WWW_DOMAIN=www.example.com (option)
 ```
 
-`WWW_DOMAIN` is optional. Leave it empty if you only want a single hostname such as `qparking.example.com`.
-
-Then start the HTTPS stack:
+Start the HTTPS stack:
 
 ```bash
 docker compose \
@@ -129,168 +173,81 @@ docker compose \
   up -d --build
 ```
 
-The app will be served from `https://example.com/#/`.
-
-For a full single-server rollout example, see `infra/docker/DEPLOY_HETZNER.md`.
-
-## Data and database
-
-The default database path is `apps/api/var/zones.sqlite`. Running `composer run db:init` creates the schema and seeds the database with sample zones for Helsinki, Espoo, and Vantaa.
-
-An optional import script can replace the seeded data with parking records fetched from the Overpass API:
-
-```bash
-cd apps/api
-php scripts/import-zones.php
-```
-
-### Real parking data: source and coverage
-
-The real-data import path currently uses OpenStreetMap data through the Overpass API. The script sends a query for `amenity=parking` objects inside a broad bounding box that covers the Helsinki, Espoo, and Vantaa area:
-
-- south-west / north-east bounds: `60.1, 24.6, 60.35, 25.15`
-- object types: both `node` and `way`
-- geometry handling: points use their own coordinates, and polygonal parking areas use the `center` returned by Overpass
-
-In practice, this means the import covers real parking objects that exist in OSM within that region, rather than only the hand-written demo seed rows.
-
-### What is real vs. what is derived
-
-When `php scripts/import-zones.php` runs, the most reliable real fields are:
-
-- parking object presence inside the Helsinki-region query bounds
-- latitude and longitude
-- OSM-provided `name` when available
-- tagged `capacity` when available
-- some parking characteristics exposed through OSM tags such as `parking`, `fee`, `charge`, `access`, `surface`, and `park_ride`
-
-Some fields in the app schema are still derived or simplified during import:
-
-- `city` is inferred from rough coordinate rules, not administrative polygons
-- `type` is mapped heuristically from the OSM `parking` tag
-- `amenities` are translated from a subset of OSM tags into UI-friendly labels
-- `openingHours` are defaulted to simple schedules
-- `hourlyRateEur` is simulated when the source only indicates that parking is paid
-- `status` is currently assumed to be `active`
-- `description` is generated text that includes the imported OSM element ID
-
-Two amenities, `EV Charging` and `Security Cameras`, are currently assigned with random demo logic in the importer, so they should not be treated as authoritative real-world facts.
-
-### Data integration approach
-
-The integration is currently a one-shot import into the app's SQLite database:
-
-1. The script initializes the local database schema.
-2. It requests raw parking data from Overpass API.
-3. It clears the existing `zones` table.
-4. It transforms the external OSM payload into the app's internal `zones` schema.
-5. The frontend and API then read only from local SQLite.
-
-This keeps the runtime app simple because the UI does not call Overpass directly and the backend does not depend on live third-party requests for normal reads. It also means imported data is a snapshot, not a continuous sync.
-
-### Suggested next optimizations
-
-- Replace rough city assignment with polygon-based reverse geocoding or authoritative municipal boundaries.
-- Store source metadata explicitly, for example `source`, external object ID, import timestamp, and raw source tags.
-- Remove random demo enrichment and replace it with deterministic mapping rules only.
-- Parse real `opening_hours` tags when present instead of applying fallback schedules.
-- Improve paid-parking handling by extracting pricing from structured sources instead of generating placeholder hourly rates.
-- Add deduplication and upsert logic so repeated imports update records instead of deleting and reloading the whole table.
-- Add scheduled sync jobs plus import reporting for failures, skipped rows, and transformed fields.
-- Combine OSM geometry with more authoritative city or operator datasets if you need better coverage, pricing accuracy, occupancy, or status changes.
-
-The current importer is therefore useful for bootstrapping a more realistic demo dataset, but it should still be treated as a lightweight data-ingestion prototype rather than a production-grade parking data pipeline.
-
-## Configuration
-
-### Backend environment variables
-
-- `APP_ENV=development|production`
-- `APP_DEBUG=true|false`
-- `PARKING_ZONES_DB_PATH=/absolute/path/to/zones.sqlite`
-- `PARKING_ZONES_AUTO_SEED=true|false`
-
-Additional config keys exist in `apps/api/src/Config/AppConfig.php`:
-
-- `PARKING_ZONES_ENABLE_LIVE_AVAILABILITY`
-- `PARKING_ZONES_PARKKIHUBI_BASE_URL`
-- `PARKING_ZONES_LIIPI_BASE_URL`
-- `PARKING_ZONES_AVAILABILITY_HTTP_TIMEOUT`
-
-Those values are currently not connected to the exposed API routes.
-
-### Frontend environment variables
-
-- `VITE_API_BASE_URL=http://localhost:8000`
-
-This value is used only by the Vite development proxy.
-
-## API
+## 6. API Reference
 
 ### `GET /api/zones`
 
-Returns a paginated list of zone summaries.
+Returns a paginated list of parking zone summaries.
 
 Supported query parameters:
 
 - `city=helsinki|espoo|vantaa`
-- `q=<search text>`
+- `q=<keyword>`
 - `type=<zone type>`
 - `status=active|inactive`
 - `open_now=true|false`
 - `lat=<latitude>`
 - `lng=<longitude>`
-- `radius=<positive float>`
+- `radius=<km>`
 - `amenities=<comma-separated list>`
 - `sort=name|price_asc|price_desc|distance_asc`
 - `page=<positive integer>`
 - `limit=<positive integer>` with a backend maximum of `100`
 
-Behavior notes:
+Notes:
 
-- `open_now` is derived from stored opening hours in the `Europe/Helsinki` time zone.
-- `distance_asc` sorting and `distanceKm` in the response are only meaningful when both `lat` and `lng` are provided.
-- `amenities` matches zones that contain all requested amenities.
+- `distanceKm` is returned only when both `lat` and `lng` are provided
+- `distance_asc` is only meaningful when coordinates are included
+- `open_now` is evaluated in the `Europe/Helsinki` time zone
+- `amenities` uses an all-match filter
 
-Example response:
+Example:
 
-```json
-{
-  "items": [
-    {
-      "id": 1,
-      "name": "Kamppi Center",
-      "city": "helsinki",
-      "type": "commercial",
-      "status": "active",
-      "hourlyRateEur": 4.8,
-      "latitude": 60.1685,
-      "longitude": 24.9318,
-      "amenities": ["EV Charging", "Indoor Parking"],
-      "openingHours": {
-        "weekdays": "00:00-23:59",
-        "weekends": "00:00-23:59"
-      },
-      "distanceKm": 1.24
-    }
-  ],
-  "total": 5,
-  "page": 1,
-  "limit": 20
-}
+```bash
+GET /api/zones?city=helsinki&lat=60.1670&lng=24.9475&sort=distance_asc
 ```
+
+Top-level response fields:
+
+- `items`
+- `total`
+- `page`
+- `limit`
+
+List item fields:
+
+- `id`
+- `name`
+- `city`
+- `type`
+- `status`
+- `hourlyRateEur`
+- `latitude`
+- `longitude`
+- `amenities`
+- `openingHours`
+- `distanceKm` (only when coordinates are provided)
 
 ### `GET /api/zones/{id}`
 
-Returns full detail for a single zone, including:
+Returns the full detail payload for a single parking zone.
 
+Detail fields:
+
+- `id`
+- `name`
+- `city`
+- `type`
+- `status`
 - `description`
 - `maxCapacity`
+- `hourlyRateEur`
+- `latitude`
+- `longitude`
 - `amenities`
 - `openingHours`
-- `latitude` and `longitude`
 
-If the zone does not exist, the API returns `404` with:
+If the zone does not exist, the API returns:
 
 ```json
 {
@@ -298,23 +255,64 @@ If the zone does not exist, the API returns `404` with:
 }
 ```
 
-## Testing
+## 7. Environment Variables
 
-Backend:
+### Backend
+
+| Variable | Description | Default |
+| --- | --- | --- |
+| `APP_ENV` | Runtime environment, `development` or `production` | `development` |
+| `APP_DEBUG` | Enable debug mode | `true` in development, `false` in production by default |
+| `PARKING_ZONES_DB_PATH` | SQLite database file path | `apps/api/var/zones.sqlite` |
+| `PARKING_ZONES_AUTO_SEED` | Auto-seed the database when empty | `true` |
+| `PARKING_ZONES_ENABLE_LIVE_AVAILABILITY` | Feature flag for live availability support | `false` |
+| `PARKING_ZONES_PARKKIHUBI_BASE_URL` | Reserved external parking data service URL | `https://pubapi.parkkiopas.fi/public/v1` |
+| `PARKING_ZONES_LIIPI_BASE_URL` | Reserved external parking data service URL | `https://parking.fintraffic.fi/api/v1` |
+| `PARKING_ZONES_AVAILABILITY_HTTP_TIMEOUT` | Timeout in seconds for external availability requests | `2.0` |
+
+
+
+## 8. Test Coverage
+
+### Backend Tests
+
+Run:
 
 ```bash
 cd apps/api
 composer test
 ```
 
-Frontend:
+Covered scenarios include:
+
+- Contract validation for the list endpoint
+- City filtering
+- Keyword search, sorting, status filtering, and pagination
+- `open_now` filtering
+- Distance sorting and `distanceKm` output when coordinates are provided
+- Contract validation for the detail endpoint
+- `404` handling for missing IDs
+- `500` handling for malformed stored JSON
+- Database init, auto-seeding, no-seed mode, and legacy-schema migration
+
+### Frontend Tests
+
+Run:
 
 ```bash
 cd apps/web
 npm run test:run
 ```
 
-Useful frontend checks:
+Covered scenarios include:
+
+- API query construction and error handling
+- Opening-hours availability logic
+- `ZoneCard` rendering and route generation
+- List page loading, empty state, filters, pagination, and geolocation-driven query updates
+- Detail page loading, error state, and data rendering
+
+Additional checks:
 
 ```bash
 cd apps/web
@@ -322,14 +320,12 @@ npm run lint
 npm run build
 ```
 
-## Deployment notes
+## 9. Possible Future Improvements
 
-The repository already includes separate Docker Compose files for local, production-style, and HTTPS deployments, but the operational model is still intentionally simple.
-
-Known limitations:
-
-- The backend container still uses PHP's built-in server.
-- There are no health checks, readiness probes, or centralized observability.
-- There is no secrets-management, backup, or restore workflow in-repo.
-- There is no authentication, authorization, or rate limiting.
-- SQLite is fine for a small demo deployment, but it is not the right long-term choice for higher concurrency.
+- Integrate real-time occupancy and operational-status APIs
+- Add more authoritative city open data or operator-maintained datasets
+- Introduce background sync and import monitoring
+- Add a map-based list view, clustered markers, and route guidance
+- Support favorites, history, and frequently used destinations
+- Show data confidence levels for price and opening-hours fields
+- Expand from the current web app into a mobile application
