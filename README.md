@@ -118,6 +118,8 @@ DOMAIN=example.com
 WWW_DOMAIN=www.example.com
 ```
 
+`WWW_DOMAIN` is optional. Leave it empty if you only want a single hostname such as `qparking.example.com`.
+
 Then start the HTTPS stack:
 
 ```bash
