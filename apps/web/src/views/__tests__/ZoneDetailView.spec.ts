@@ -203,6 +203,35 @@ describe('ZoneDetailView', () => {
     expect(wrapper.get('a.back-link').attributes('href')).toContain('q=aino')
   })
 
+  it('renders a fallback when amenities are unavailable', async () => {
+    fetchZoneMock.mockResolvedValueOnce({
+      id: 1,
+      name: 'Kamppi Center',
+      city: 'helsinki',
+      type: 'commercial',
+      status: 'active',
+      description: 'Underground parking facility',
+      maxCapacity: 450,
+      hourlyRateEur: 4.5,
+      latitude: 60.1685,
+      longitude: 24.9318,
+      amenities: [],
+      openingHours: {
+        weekdays: '06:00-23:00',
+        weekends: '08:00-23:00',
+      },
+    })
+
+    const { wrapper } = await mountView()
+
+    await flushPromises()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Amenities')
+    expect(wrapper.text()).toContain('Amenity details pending')
+    expect(wrapper.text()).toContain("We're still confirming the included amenities for this zone.")
+  })
+
   it('can unmount cleanly after details load', async () => {
     fetchZoneMock.mockResolvedValueOnce({
       id: 1,
