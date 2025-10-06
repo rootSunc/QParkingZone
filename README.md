@@ -197,9 +197,11 @@ Supported query parameters:
 Notes:
 
 - `distanceKm` is returned only when both `lat` and `lng` are provided
-- `distance_asc` is only meaningful when coordinates are included
+- `lat` and `lng` must be provided together
+- `radius` and `distance_asc` require both coordinates
 - `open_now` is evaluated in the `Europe/Helsinki` time zone
 - `amenities` uses an all-match filter
+- Invalid query parameter values return `400` with a JSON `error` message
 
 Example:
 
@@ -252,6 +254,17 @@ If the zone does not exist, the API returns:
 ```json
 {
   "error": "Zone not found"
+}
+```
+
+### `GET /api/health`
+
+Returns a lightweight health payload:
+
+```json
+{
+  "status": "ok",
+  "zones": 12
 }
 ```
 

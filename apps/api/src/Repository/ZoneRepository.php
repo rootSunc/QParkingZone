@@ -3,7 +3,6 @@ declare(strict_types=1);
 
 namespace ParkingZones\Repository;
 
-
 use DateTimeImmutable;
 use DateTimeZone;
 use PDO;
@@ -16,100 +15,55 @@ final class ZoneRepository
     public function __construct(
         private readonly PDO $pdo,
         private readonly ?DateTimeImmutable $currentTime = null
-    )
-    {
+    ) {
     }
 
-    public function fetchAllSummaries(
-        ?string $city = null,
-        ?string $query = null,
-        ?string $type = null,
-        ?string $status = null,
-        string $sort = 'name',
-        bool $openNow = false,
-        ?float $latitude = null,
-        ?float $longitude = null,
-        ?float $radius = null,
-        ?array $amenities = null,
-        int $page = 1,
-        int $limit = 20
-    ): array
+    public function fetchAllSummaries(ZoneSummaryQuery $query): array
     {
-        [$whereClause, $params] = $this->buildSummaryFilters($city, $query, $type, $status);
-        $offset = ($page - 1) * $limit;
-        $stmt = $this->pdo->prepare("
-            SELECT
-                id,
-                name,
-                city,
-                type,
-                status,
-                hourly_rate_eur AS hourlyRateEur,
-                latitude,
-                longitude,
-                amenities,
-                opening_hours AS openingHours
-            FROM zones
-            {$whereClause}
-        ");
+        [$whereClause, $params] = $this->buildSummaryFilters($query);
+        $offset = ($query->page - 1) * $query->limit;
 
-        foreach ($params as $name => $value) {
-            $stmt->bindValue(':' . $name, $value, PDO::PARAM_STR);
+        if (!$query->requiresInMemoryFilteringOrSorting()) {
+            return [
+                'items' => $this->fetchSummaryRows(
+                    $whereClause,
+                    $params,
+                    $this->resolveStaticOrderBy($query->sort),
+                    $query->limit,
+                    $offset,
+                    $query
+                ),
+                'total' => $this->countSummaries($whereClause, $params),
+                'page' => $query->page,
+                'limit' => $query->limit,
+            ];
         }
 
-        $stmt->execute();
-        $items = $stmt->fetchAll();
+        $items = $this->fetchSummaryRows($whereClause, $params, null, null, null, $query);
 
-        foreach ($items as &$item) {
-            $item['openingHours'] = $this->decodeOpeningHours($item['openingHours']);
-
-            if ($latitude !== null && $longitude !== null) {
-                $item['distanceKm'] = round(
-                    $this->calculateDistanceKm(
-                        $latitude,
-                        $longitude,
-                        (float) $item['latitude'],
-                        (float) $item['longitude']
-                    ),
-                    2
-                );
-            }
-            
-            $item['amenities'] = $this->decodeAmenities($item['amenities']);
-        }
-
-        unset($item);
-
-        if ($openNow) {
+        if ($query->openNow) {
             $items = array_values(array_filter($items, fn (array $item): bool => $this->isZoneOpenNow($item)));
         }
 
-        if ($radius !== null && $latitude !== null && $longitude !== null) {
-            $items = array_values(array_filter($items, fn (array $item): bool => isset($item['distanceKm']) && $item['distanceKm'] <= $radius));
+        if ($query->radius !== null) {
+            $items = array_values(array_filter($items, fn (array $item): bool => isset($item['distanceKm']) && $item['distanceKm'] <= $query->radius));
         }
 
-        if ($amenities !== null && count($amenities) > 0) {
-            $items = array_values(array_filter($items, function (array $item) use ($amenities): bool {
-                $itemAmenities = $item['amenities'] ?? [];
-                // Check if all requested amenities are present using array intersection
-                return count(array_intersect($amenities, $itemAmenities)) === count($amenities);
-            }));
-        }
-
-        // We can unset amenities to not bloat the summary API response, optionally. We'll leave it in for the UI to use if needed.
-
-        $this->sortSummaries($items, $sort, $latitude, $longitude);
+        $this->sortSummaries($items, $query->sort, $query->latitude, $query->longitude);
         $total = count($items);
-        $items = array_slice($items, $offset, $limit);
-
-
+        $items = array_slice($items, $offset, $query->limit);
 
         return [
             'items' => $items,
             'total' => $total,
-            'page' => $page,
-            'limit' => $limit,
+            'page' => $query->page,
+            'limit' => $query->limit,
         ];
+    }
+
+    public function countZones(): int
+    {
+        return (int) $this->pdo->query('SELECT COUNT(*) FROM zones')->fetchColumn();
     }
 
     public function fetchDetailById(int $id): ?array
@@ -142,9 +96,93 @@ final class ZoneRepository
         $zone['amenities'] = $this->decodeAmenities($zone['amenities']);
         $zone['openingHours'] = $this->decodeOpeningHours($zone['openingHours']);
 
-
-
         return $zone;
+    }
+
+    private function fetchSummaryRows(
+        string $whereClause,
+        array $params,
+        ?string $orderBy,
+        ?int $limit,
+        ?int $offset,
+        ZoneSummaryQuery $query
+    ): array {
+        $limitClause = $limit === null ? '' : 'LIMIT :limit OFFSET :offset';
+        $orderClause = $orderBy === null ? '' : 'ORDER BY ' . $orderBy;
+        $stmt = $this->pdo->prepare("
+            SELECT
+                z.id,
+                z.name,
+                z.city,
+                z.type,
+                z.status,
+                z.hourly_rate_eur AS hourlyRateEur,
+                z.latitude,
+                z.longitude,
+                z.amenities,
+                z.opening_hours AS openingHours
+            FROM zones z
+            {$whereClause}
+            {$orderClause}
+            {$limitClause}
+        ");
+
+        $this->bindQueryParams($stmt, $params);
+
+        if ($limit !== null && $offset !== null) {
+            $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+            $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+        }
+
+        $stmt->execute();
+
+        return $this->decodeSummaryRows($stmt->fetchAll(), $query);
+    }
+
+    private function countSummaries(string $whereClause, array $params): int
+    {
+        $stmt = $this->pdo->prepare("
+            SELECT COUNT(*)
+            FROM zones z
+            {$whereClause}
+        ");
+        $this->bindQueryParams($stmt, $params);
+        $stmt->execute();
+
+        return (int) $stmt->fetchColumn();
+    }
+
+    private function bindQueryParams(\PDOStatement $stmt, array $params): void
+    {
+        foreach ($params as $name => $value) {
+            $type = is_int($value) ? PDO::PARAM_INT : PDO::PARAM_STR;
+            $stmt->bindValue(':' . $name, $value, $type);
+        }
+    }
+
+    private function decodeSummaryRows(array $rows, ZoneSummaryQuery $query): array
+    {
+        foreach ($rows as &$item) {
+            $item['openingHours'] = $this->decodeOpeningHours($item['openingHours']);
+
+            if ($query->hasCoordinates()) {
+                $item['distanceKm'] = round(
+                    $this->calculateDistanceKm(
+                        (float) $query->latitude,
+                        (float) $query->longitude,
+                        (float) $item['latitude'],
+                        (float) $item['longitude']
+                    ),
+                    2
+                );
+            }
+
+            $item['amenities'] = $this->decodeAmenities($item['amenities']);
+        }
+
+        unset($item);
+
+        return $rows;
     }
 
     private function decodeAmenities(string $payload): array
@@ -181,39 +219,64 @@ final class ZoneRepository
         return $openingHours;
     }
 
-    private function buildSummaryFilters(
-        ?string $city,
-        ?string $query,
-        ?string $type,
-        ?string $status
-    ): array {
+    private function buildSummaryFilters(ZoneSummaryQuery $query): array
+    {
         $clauses = [];
         $params = [];
 
-        if ($city !== null) {
-            $clauses[] = 'city = :city';
-            $params['city'] = $city;
+        if ($query->city !== null) {
+            $clauses[] = 'z.city = :city';
+            $params['city'] = $query->city;
         }
 
-        if ($query !== null) {
-            $clauses[] = 'LOWER(name) LIKE :query';
-            $params['query'] = '%' . strtolower($query) . '%';
+        if ($query->query !== null) {
+            $clauses[] = 'LOWER(z.name) LIKE :query';
+            $params['query'] = '%' . strtolower($query->query) . '%';
         }
 
-        if ($type !== null) {
-            $clauses[] = 'type = :type';
-            $params['type'] = $type;
+        if ($query->type !== null) {
+            $clauses[] = 'z.type = :type';
+            $params['type'] = $query->type;
         }
 
-        if ($status !== null) {
-            $clauses[] = 'status = :status';
-            $params['status'] = $status;
+        if ($query->status !== null) {
+            $clauses[] = 'z.status = :status';
+            $params['status'] = $query->status;
+        }
+
+        foreach ($query->amenities ?? [] as $index => $amenity) {
+            $key = 'amenity_' . $index;
+            $clauses[] = "EXISTS (
+                SELECT 1
+                FROM json_each(z.amenities)
+                WHERE json_each.value = :{$key}
+            )";
+            $params[$key] = $amenity;
+        }
+
+        if ($query->radius !== null && $query->hasCoordinates()) {
+            $box = $this->calculateBoundingBox((float) $query->latitude, (float) $query->longitude, $query->radius);
+            $clauses[] = 'z.latitude BETWEEN :min_latitude AND :max_latitude';
+            $clauses[] = 'z.longitude BETWEEN :min_longitude AND :max_longitude';
+            $params['min_latitude'] = $box['minLatitude'];
+            $params['max_latitude'] = $box['maxLatitude'];
+            $params['min_longitude'] = $box['minLongitude'];
+            $params['max_longitude'] = $box['maxLongitude'];
         }
 
         return [
             $clauses === [] ? '' : 'WHERE ' . implode(' AND ', $clauses),
             $params,
         ];
+    }
+
+    private function resolveStaticOrderBy(string $sort): string
+    {
+        return match ($sort) {
+            'price_asc' => 'z.hourly_rate_eur ASC, z.name ASC, z.id ASC',
+            'price_desc' => 'z.hourly_rate_eur DESC, z.name ASC, z.id ASC',
+            default => 'z.name ASC, z.id ASC',
+        };
     }
 
     private function isZoneOpenNow(array $zone): bool
@@ -294,6 +357,20 @@ final class ZoneRepository
             + cos($startLat) * cos($endLat) * sin($deltaLng / 2) ** 2;
 
         return $earthRadiusKm * 2 * asin(min(1.0, sqrt($a)));
+    }
+
+    private function calculateBoundingBox(float $latitude, float $longitude, float $radiusKm): array
+    {
+        $earthRadiusKm = 6371.0;
+        $latitudeDelta = rad2deg($radiusKm / $earthRadiusKm);
+        $longitudeDelta = rad2deg($radiusKm / ($earthRadiusKm * max(cos(deg2rad($latitude)), 0.01)));
+
+        return [
+            'minLatitude' => max(-90.0, $latitude - $latitudeDelta),
+            'maxLatitude' => min(90.0, $latitude + $latitudeDelta),
+            'minLongitude' => max(-180.0, $longitude - $longitudeDelta),
+            'maxLongitude' => min(180.0, $longitude + $longitudeDelta),
+        ];
     }
 
     private function getZoneClock(): array
