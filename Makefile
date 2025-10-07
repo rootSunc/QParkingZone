@@ -5,11 +5,13 @@ API_DIR := $(CURDIR)/apps/api
 WEB_DIR := $(CURDIR)/apps/web
 COMPOSER_RUN := docker run --rm --user "$$(id -u):$$(id -g)" -e COMPOSER_CACHE_DIR=/tmp/composer-cache -v "$(API_DIR):/app" -w /app $(COMPOSER_IMAGE)
 
-.PHONY: install test audit build lint compose-config up down api-install api-test api-audit web-install web-lint web-test web-build web-audit
+.PHONY: install test test-e2e audit build lint compose-config up down api-install api-test api-audit web-install web-lint web-test web-e2e web-build web-audit
 
 install: api-install web-install
 
 test: api-test web-test
+
+test-e2e: web-e2e
 
 audit: api-audit web-audit
 
@@ -45,6 +47,9 @@ web-lint:
 
 web-test:
 	cd "$(WEB_DIR)" && npm run test:run
+
+web-e2e:
+	cd "$(WEB_DIR)" && npm run test:e2e
 
 web-build:
 	cd "$(WEB_DIR)" && npm run build
