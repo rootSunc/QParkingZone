@@ -12,7 +12,12 @@ CREATE TABLE IF NOT EXISTS zones (
   amenities TEXT NOT NULL
     CHECK (json_valid(amenities) AND json_type(amenities) = 'array'),
   opening_hours TEXT NOT NULL
-    CHECK (json_valid(opening_hours) AND json_type(opening_hours) = 'object')
+    CHECK (json_valid(opening_hours) AND json_type(opening_hours) = 'object'),
+  source_provider TEXT NOT NULL DEFAULT 'seed',
+  source_external_id TEXT,
+  source_updated_at TEXT,
+  source_payload TEXT NOT NULL DEFAULT '{}'
+    CHECK (json_valid(source_payload) AND json_type(source_payload) = 'object')
 );
 
 CREATE TABLE IF NOT EXISTS zone_availability_sources (
@@ -31,6 +36,9 @@ CREATE INDEX IF NOT EXISTS idx_zones_city ON zones (city);
 CREATE INDEX IF NOT EXISTS idx_zones_type ON zones (type);
 CREATE INDEX IF NOT EXISTS idx_zones_status ON zones (status);
 CREATE INDEX IF NOT EXISTS idx_zones_name ON zones (name);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_zones_source_identity
+  ON zones (source_provider, source_external_id)
+  WHERE source_external_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_zone_availability_sources_zone_priority
   ON zone_availability_sources (zone_id, priority);
 CREATE INDEX IF NOT EXISTS idx_zone_availability_sources_provider_external

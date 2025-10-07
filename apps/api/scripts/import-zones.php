@@ -4,176 +4,390 @@ declare(strict_types=1);
 require __DIR__ . '/../vendor/autoload.php';
 require __DIR__ . '/../src/bootstrap.php';
 
-use ParkingZones\Infrastructure\Database;
 use ParkingZones\Config\AppConfig;
+use ParkingZones\Infrastructure\Database;
+
+const SOURCE_PROVIDER = 'openstreetmap';
+const OVERPASS_URL = 'https://overpass-api.de/api/interpreter';
+const CITY_BOUNDS = [
+    'helsinki' => ['minLat' => 60.10, 'minLon' => 24.80, 'maxLat' => 60.32, 'maxLon' => 25.25],
+    'espoo' => ['minLat' => 60.10, 'minLon' => 24.45, 'maxLat' => 60.35, 'maxLon' => 24.90],
+    'vantaa' => ['minLat' => 60.22, 'minLon' => 24.75, 'maxLat' => 60.38, 'maxLon' => 25.25],
+];
 
 $config = AppConfig::fromEnvironment();
-$pdo = Database::sqliteFile($config->databasePath, false); // Don't auto-seed
-echo "Initialized database at {$config->databasePath}\n";
+$pdo = Database::sqliteFile($config->databasePath, false);
 
-// Ensure tables exist properly using the Database class method if it were public,
-// but since initializeSqliteDatabase is public we can call it:
 Database::initializeSqliteDatabase(
     $pdo,
     dirname(__DIR__) . '/database/schema.sql',
     dirname(__DIR__) . '/database/seed.sql',
-    false // disable auto-seed for the import
+    false
 );
 
-echo "Fetching real parking zones data via Overpass API (Helsinki, Espoo, Vantaa bounds)...\n";
+echo "Initialized database at {$config->databasePath}\n";
+echo "Fetching parking zones from OpenStreetMap via Overpass API...\n";
 
-$overpassUrl = 'https://overpass-api.de/api/interpreter';
-$overpassQuery = '[out:json][timeout:25];
-(
-  node["amenity"="parking"](60.1, 24.6, 60.35, 25.15);
-  way["amenity"="parking"](60.1, 24.6, 60.35, 25.15);
-);
-out center 1000;';
-
-$options = [
-    'http' => [
-        'header'  => "Content-type: application/x-www-form-urlencoded\r\nUser-Agent: QParkingZones/1.0",
-        'method'  => 'POST',
-        'content' => 'data=' . urlencode($overpassQuery)
-    ]
-];
-
-$context  = stream_context_create($options);
-$response = file_get_contents($overpassUrl, false, $context);
-
-if ($response === false) {
-    die("Error fetching data from Overpass API.\n");
-}
-
-$data = json_decode($response, true);
-if (json_last_error() !== JSON_ERROR_NONE || !isset($data['elements'])) {
-    die("Error parsing JSON from Overpass API.\n");
-}
-
-$elements = $data['elements'];
+$elements = fetchParkingElements();
 echo sprintf("Retrieved %d raw parking elements.\n", count($elements));
+
+$importedAt = new DateTimeImmutable('now', new DateTimeZone('UTC'));
+$zones = [];
+
+foreach ($elements as $element) {
+    $zone = normalizeParkingElement($element, $importedAt);
+
+    if ($zone !== null) {
+        $zones[] = $zone;
+    }
+}
+
+if ($zones === []) {
+    fwrite(STDERR, "No usable parking zones found; keeping existing database untouched.\n");
+    exit(1);
+}
 
 $pdo->beginTransaction();
 
 try {
-    // Clear out old seed data
-    $pdo->exec('DELETE FROM zones');
-
-    $stmt = $pdo->prepare("
+    $pdo->exec('CREATE TEMP TABLE current_import_sources (source_external_id TEXT PRIMARY KEY)');
+    $seenStmt = $pdo->prepare('INSERT INTO current_import_sources (source_external_id) VALUES (:source_external_id)');
+    $upsertStmt = $pdo->prepare("
         INSERT INTO zones (
-            name, city, type, status, description, max_capacity, hourly_rate_eur, 
-            latitude, longitude, amenities, opening_hours
+            name,
+            city,
+            type,
+            status,
+            description,
+            max_capacity,
+            hourly_rate_eur,
+            latitude,
+            longitude,
+            amenities,
+            opening_hours,
+            source_provider,
+            source_external_id,
+            source_updated_at,
+            source_payload
         ) VALUES (
-            :name, :city, :type, :status, :description, :max_capacity, :hourly_rate_eur,
-            :latitude, :longitude, :amenities, :opening_hours
+            :name,
+            :city,
+            :type,
+            :status,
+            :description,
+            :max_capacity,
+            :hourly_rate_eur,
+            :latitude,
+            :longitude,
+            :amenities,
+            :opening_hours,
+            :source_provider,
+            :source_external_id,
+            :source_updated_at,
+            :source_payload
         )
+        ON CONFLICT(source_provider, source_external_id) WHERE source_external_id IS NOT NULL
+        DO UPDATE SET
+            name = excluded.name,
+            city = excluded.city,
+            type = excluded.type,
+            status = excluded.status,
+            description = excluded.description,
+            max_capacity = excluded.max_capacity,
+            hourly_rate_eur = excluded.hourly_rate_eur,
+            latitude = excluded.latitude,
+            longitude = excluded.longitude,
+            amenities = excluded.amenities,
+            opening_hours = excluded.opening_hours,
+            source_updated_at = excluded.source_updated_at,
+            source_payload = excluded.source_payload
     ");
 
-    $count = 0;
-    foreach ($elements as $el) {
-        $tags = $el['tags'] ?? [];
-        
-        $lat = $el['lat'] ?? $el['center']['lat'] ?? null;
-        $lon = $el['lon'] ?? $el['center']['lon'] ?? null;
-        
-        if ($lat === null || $lon === null) {
-            continue;
-        }
+    $pdo->exec("DELETE FROM zones WHERE source_provider = 'seed'");
 
-        // Only take named parking spaces or large ones to keep quality high
-        $name = $tags['name'] ?? null;
-        $capacity = (int)($tags['capacity'] ?? rand(20, 300));
-        
-        // Skip uninteresting street parking unless it has a name
-        if ($name === null && $capacity < 50) {
-            continue;
-        }
-        
-        if ($name === null) {
-            $name = (($tags['parking'] ?? 'surface') === 'surface' ? 'Surface Parking ' : 'Parking Area ') . $el['id'];
-        }
-
-        // Determine city based on rough bounding boxes to simulate
-        $city = 'helsinki';
-        if ($lon < 24.85) {
-            $city = 'espoo';
-        } elseif ($lat > 60.25) {
-            $city = 'vantaa';
-        }
-
-        $type = 'street';
-        if (($tags['parking'] ?? '') === 'multi-storey' || ($tags['parking'] ?? '') === 'underground') {
-            $type = 'commercial';
-        }
-
-        // Determine amenities
-        $amenities = [];
-        if (($tags['charge'] ?? '') === 'yes' || ($tags['fee'] ?? '') === 'yes') {
-            $amenities[] = 'Ticket Machine';
-        }
-        if (($tags['parking'] ?? '') === 'multi-storey' || ($tags['parking'] ?? '') === 'underground') {
-            $amenities[] = 'Indoor Parking';
-        }
-        if (($tags['access'] ?? '') === 'customers') {
-            $amenities[] = 'Retail Validation';
-        }
-        if (($tags['surface'] ?? '') === 'paved' || ($tags['surface'] ?? '') === 'asphalt') {
-            $amenities[] = 'Paved Surface';
-        }
-        if (($tags['park_ride'] ?? '') === 'yes') {
-            $amenities[] = 'Park and Ride Access';
-            $amenities[] = 'Train Station Nearby';
-        }
-        
-        // Randomly assign some common ones for demo purposes
-        if (rand(0, 4) === 1) $amenities[] = 'EV Charging';
-        if (rand(0, 4) === 1) $amenities[] = 'Security Cameras';
-        
-        $amenities = array_values(array_unique($amenities));
-        
-        $basePrice = 0.0;
-        if (($tags['fee'] ?? '') === 'yes') {
-            $basePrice = (float)rand(10, 50) / 10;
-        }
-
-        // Assume active
-        $status = 'active';
-        
-        // Minimal schedule handling
-        // For simplicity, default schedules based on access
-        $openingHours = [
-            'weekdays' => '00:00-23:59',
-            'weekends' => '00:00-23:59'
-        ];
-
-        if (($tags['access'] ?? '') === 'customers') {
-            $openingHours = [
-                'weekdays' => '07:00-22:00',
-                'weekends' => '08:00-20:00'
-            ];
-        }
-
-        $stmt->execute([
-            'name' => $name,
-            'city' => $city,
-            'type' => $type,
-            'status' => $status,
-            'description' => 'Real parking data imported from OpenStreetMap (Overpass API). ID: ' . $el['id'],
-            'max_capacity' => $capacity,
-            'hourly_rate_eur' => $basePrice,
-            'latitude' => $lat,
-            'longitude' => $lon,
-            'amenities' => json_encode($amenities, JSON_UNESCAPED_UNICODE),
-            'opening_hours' => json_encode($openingHours, JSON_UNESCAPED_UNICODE)
-        ]);
-
-        $count++;
+    foreach ($zones as $zone) {
+        $seenStmt->execute(['source_external_id' => $zone['source_external_id']]);
+        $upsertStmt->execute($zone);
     }
 
+    $pdo->exec("
+        DELETE FROM zones
+        WHERE source_provider = 'openstreetmap'
+          AND source_external_id NOT IN (
+            SELECT source_external_id
+            FROM current_import_sources
+          )
+    ");
+    $pdo->exec('DROP TABLE current_import_sources');
     $pdo->commit();
-    echo "Successfully imported {$count} parking zones!\n";
-} catch (Throwable $e) {
+
+    echo sprintf("Imported or updated %d deterministic parking zones.\n", count($zones));
+} catch (Throwable $exception) {
     $pdo->rollBack();
-    echo "Import failed: " . $e->getMessage() . "\n";
+    fwrite(STDERR, "Import failed: {$exception->getMessage()}\n");
     exit(1);
+}
+
+function fetchParkingElements(): array
+{
+    $overpassQuery = '[out:json][timeout:30];
+(
+  node["amenity"="parking"](60.10,24.45,60.38,25.25);
+  way["amenity"="parking"](60.10,24.45,60.38,25.25);
+);
+out center 1500;';
+
+    $context = stream_context_create([
+        'http' => [
+            'header' => "Content-type: application/x-www-form-urlencoded\r\nUser-Agent: QParkingZones/1.0\r\n",
+            'method' => 'POST',
+            'content' => 'data=' . urlencode($overpassQuery),
+            'timeout' => 35,
+        ],
+    ]);
+    $response = file_get_contents(OVERPASS_URL, false, $context);
+
+    if ($response === false) {
+        throw new RuntimeException('Error fetching data from Overpass API.');
+    }
+
+    $data = json_decode($response, true, 512, JSON_THROW_ON_ERROR);
+    if (!is_array($data) || !isset($data['elements']) || !is_array($data['elements'])) {
+        throw new RuntimeException('Overpass API returned an unexpected payload.');
+    }
+
+    return $data['elements'];
+}
+
+function normalizeParkingElement(array $element, DateTimeImmutable $importedAt): ?array
+{
+    $tags = is_array($element['tags'] ?? null) ? $element['tags'] : [];
+    $latitude = $element['lat'] ?? $element['center']['lat'] ?? null;
+    $longitude = $element['lon'] ?? $element['center']['lon'] ?? null;
+
+    if (!is_numeric($latitude) || !is_numeric($longitude)) {
+        return null;
+    }
+
+    $latitude = (float) $latitude;
+    $longitude = (float) $longitude;
+    $city = resolveCity($latitude, $longitude);
+
+    if ($city === null) {
+        return null;
+    }
+
+    $osmType = is_string($element['type'] ?? null) ? $element['type'] : 'element';
+    $osmId = (string) ($element['id'] ?? '');
+    if ($osmId === '') {
+        return null;
+    }
+
+    $parkingType = is_string($tags['parking'] ?? null) ? strtolower($tags['parking']) : 'surface';
+    $type = in_array($parkingType, ['multi-storey', 'underground'], true) ? 'commercial' : 'street';
+    $capacity = resolveCapacity($tags, $parkingType);
+    $rate = resolveHourlyRate($tags, $type);
+    $amenities = resolveAmenities($tags, $parkingType);
+    $openingHours = resolveOpeningHours($tags);
+    $name = resolveName($tags, $parkingType, $osmId);
+    $sourceExternalId = "{$osmType}:{$osmId}";
+
+    return [
+        'name' => $name,
+        'city' => $city,
+        'type' => $type,
+        'status' => 'active',
+        'description' => sprintf(
+            'Parking data imported from OpenStreetMap. Capacity and price fields are derived from explicit OSM tags when available, otherwise deterministic type-based defaults are used. Source: %s.',
+            $sourceExternalId
+        ),
+        'max_capacity' => $capacity,
+        'hourly_rate_eur' => $rate,
+        'latitude' => $latitude,
+        'longitude' => $longitude,
+        'amenities' => json_encode($amenities, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE),
+        'opening_hours' => json_encode($openingHours, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE),
+        'source_provider' => SOURCE_PROVIDER,
+        'source_external_id' => $sourceExternalId,
+        'source_updated_at' => $importedAt->format(DATE_ATOM),
+        'source_payload' => json_encode([
+            'osmType' => $osmType,
+            'osmId' => $osmId,
+            'tags' => $tags,
+            'derived' => [
+                'parkingType' => $parkingType,
+                'hourlyRateEur' => $rate,
+                'maxCapacity' => $capacity,
+            ],
+        ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+    ];
+}
+
+function resolveCity(float $latitude, float $longitude): ?string
+{
+    foreach (CITY_BOUNDS as $city => $bounds) {
+        if (
+            $latitude >= $bounds['minLat']
+            && $latitude <= $bounds['maxLat']
+            && $longitude >= $bounds['minLon']
+            && $longitude <= $bounds['maxLon']
+        ) {
+            return $city;
+        }
+    }
+
+    return null;
+}
+
+function resolveCapacity(array $tags, string $parkingType): int
+{
+    $capacity = parsePositiveInteger($tags['capacity'] ?? null);
+
+    if ($capacity !== null) {
+        return min($capacity, 5000);
+    }
+
+    return match ($parkingType) {
+        'multi-storey' => 250,
+        'underground' => 180,
+        'street' => 20,
+        default => 60,
+    };
+}
+
+function resolveHourlyRate(array $tags, string $type): float
+{
+    $charge = parseHourlyCharge($tags['charge'] ?? null);
+
+    if ($charge !== null) {
+        return $charge;
+    }
+
+    if (strtolower((string) ($tags['fee'] ?? '')) !== 'yes') {
+        return 0.0;
+    }
+
+    return $type === 'commercial' ? 3.0 : 2.5;
+}
+
+function resolveAmenities(array $tags, string $parkingType): array
+{
+    $amenities = [];
+
+    if (strtolower((string) ($tags['fee'] ?? '')) === 'yes') {
+        $amenities[] = 'Ticket Machine';
+    }
+
+    if (in_array($parkingType, ['multi-storey', 'underground'], true)) {
+        $amenities[] = 'Indoor Parking';
+    }
+
+    if (strtolower((string) ($tags['access'] ?? '')) === 'customers') {
+        $amenities[] = 'Retail Validation';
+    }
+
+    if (in_array(strtolower((string) ($tags['surface'] ?? '')), ['paved', 'asphalt', 'concrete'], true)) {
+        $amenities[] = 'Paved Surface';
+    }
+
+    if (strtolower((string) ($tags['park_ride'] ?? '')) === 'yes') {
+        $amenities[] = 'Park and Ride Access';
+        $amenities[] = 'Train Station Nearby';
+    }
+
+    if (
+        parsePositiveInteger($tags['capacity:charging'] ?? null) !== null
+        || strtolower((string) ($tags['charging_station'] ?? '')) === 'yes'
+    ) {
+        $amenities[] = 'EV Charging';
+    }
+
+    if (
+        parsePositiveInteger($tags['capacity:disabled'] ?? null) !== null
+        || strtolower((string) ($tags['disabled'] ?? '')) === 'yes'
+    ) {
+        $amenities[] = 'Barrier-Free Access';
+    }
+
+    if (strtolower((string) ($tags['surveillance'] ?? '')) === 'yes') {
+        $amenities[] = 'Security Cameras';
+    }
+
+    return array_values(array_unique($amenities));
+}
+
+function resolveOpeningHours(array $tags): array
+{
+    $openingHours = strtolower(trim((string) ($tags['opening_hours'] ?? '')));
+
+    if ($openingHours === '24/7') {
+        return [
+            'weekdays' => '00:00-23:59',
+            'weekends' => '00:00-23:59',
+        ];
+    }
+
+    if (strtolower((string) ($tags['access'] ?? '')) === 'customers') {
+        return [
+            'weekdays' => '07:00-22:00',
+            'weekends' => '08:00-20:00',
+        ];
+    }
+
+    return [
+        'weekdays' => '00:00-23:59',
+        'weekends' => '00:00-23:59',
+    ];
+}
+
+function resolveName(array $tags, string $parkingType, string $osmId): string
+{
+    $name = trim((string) ($tags['name'] ?? ''));
+
+    if ($name !== '') {
+        return $name;
+    }
+
+    $label = $parkingType === 'surface' ? 'Surface Parking' : 'Parking Area';
+
+    return "{$label} {$osmId}";
+}
+
+function parsePositiveInteger(mixed $value): ?int
+{
+    if (!is_scalar($value)) {
+        return null;
+    }
+
+    if (!preg_match('/\d+/', (string) $value, $match)) {
+        return null;
+    }
+
+    $parsed = (int) $match[0];
+
+    return $parsed > 0 ? $parsed : null;
+}
+
+function parseHourlyCharge(mixed $value): ?float
+{
+    if (!is_scalar($value)) {
+        return null;
+    }
+
+    $normalized = str_replace(',', '.', strtolower((string) $value));
+
+    if (!preg_match('/(\d+(?:\.\d+)?)/', $normalized, $match)) {
+        return null;
+    }
+
+    $amount = (float) $match[1];
+    if ($amount <= 0) {
+        return null;
+    }
+
+    if (str_contains($normalized, '/day') || str_contains($normalized, 'per day')) {
+        return round($amount / 8, 2);
+    }
+
+    return round($amount, 2);
 }

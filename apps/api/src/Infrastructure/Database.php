@@ -107,7 +107,9 @@ final class Database
             && str_contains($normalized, "json_type(amenities) = 'array'")
             && str_contains($normalized, 'json_valid(opening_hours)')
             && str_contains($normalized, "json_type(opening_hours) = 'object'")
-            && str_contains($normalized, 'city text not null');
+            && str_contains($normalized, 'city text not null')
+            && str_contains($normalized, 'source_provider text not null')
+            && str_contains($normalized, 'json_valid(source_payload)');
     }
 
     private static function migrateZonesTable(PDO $pdo, string $schemaSql): void
@@ -120,6 +122,18 @@ final class Database
             $citySelect = self::tableHasColumn($pdo, 'zones_legacy', 'city')
                 ? 'city'
                 : "'helsinki' AS city";
+            $sourceProviderSelect = self::tableHasColumn($pdo, 'zones_legacy', 'source_provider')
+                ? 'source_provider'
+                : "'seed' AS source_provider";
+            $sourceExternalIdSelect = self::tableHasColumn($pdo, 'zones_legacy', 'source_external_id')
+                ? 'source_external_id'
+                : 'NULL AS source_external_id';
+            $sourceUpdatedAtSelect = self::tableHasColumn($pdo, 'zones_legacy', 'source_updated_at')
+                ? 'source_updated_at'
+                : 'NULL AS source_updated_at';
+            $sourcePayloadSelect = self::tableHasColumn($pdo, 'zones_legacy', 'source_payload')
+                ? 'source_payload'
+                : "'{}' AS source_payload";
             $pdo->exec("
                 INSERT INTO zones (
                     id,
@@ -133,7 +147,11 @@ final class Database
                     latitude,
                     longitude,
                     amenities,
-                    opening_hours
+                    opening_hours,
+                    source_provider,
+                    source_external_id,
+                    source_updated_at,
+                    source_payload
                 )
                 SELECT
                     id,
@@ -147,7 +165,11 @@ final class Database
                     latitude,
                     longitude,
                     amenities,
-                    opening_hours
+                    opening_hours,
+                    {$sourceProviderSelect},
+                    {$sourceExternalIdSelect},
+                    {$sourceUpdatedAtSelect},
+                    {$sourcePayloadSelect}
                 FROM zones_legacy
             ");
             $pdo->exec('DROP TABLE zones_legacy');
@@ -178,6 +200,7 @@ final class Database
             'CREATE INDEX IF NOT EXISTS idx_zones_type ON zones (type)',
             'CREATE INDEX IF NOT EXISTS idx_zones_status ON zones (status)',
             'CREATE INDEX IF NOT EXISTS idx_zones_name ON zones (name)',
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_zones_source_identity ON zones (source_provider, source_external_id) WHERE source_external_id IS NOT NULL",
             'CREATE INDEX IF NOT EXISTS idx_zone_availability_sources_zone_priority ON zone_availability_sources (zone_id, priority)',
             'CREATE INDEX IF NOT EXISTS idx_zone_availability_sources_provider_external ON zone_availability_sources (provider, external_id)',
         ] as $sql) {
