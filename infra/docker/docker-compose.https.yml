@@ -15,6 +15,11 @@ services:
     restart: unless-stopped
     volumes:
       - parking-zones-data:/app/var
+    healthcheck:
+      test: ["CMD-SHELL", "php -r 'exit(@file_get_contents(\"http://127.0.0.1:8000/api/health\") === false ? 1 : 0);'"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
   frontend:
     build:
@@ -22,16 +27,23 @@ services:
       dockerfile: ../../infra/docker/frontend.Dockerfile
     container_name: parking-zones-frontend
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     expose:
       - "80"
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/ >/dev/null 2>&1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
   caddy:
     image: caddy:2.10-alpine
     container_name: parking-zones-caddy
     depends_on:
-      - frontend
+      frontend:
+        condition: service_healthy
     command: ["/bin/sh", "/usr/local/bin/start-caddy.sh"]
     environment:
       DOMAIN: ${DOMAIN}
