@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-label="QParking">
+  <rect width="64" height="64" rx="18" fill="#101010"/>
+  <path d="M30 46c-8.3 0-15-6.7-15-15s6.7-15 15-15 15 6.7 15 15c0 3.2-1 6.2-2.8 8.6l5.2 5.2-5.6 5.6-5-5C34.7 45.8 32.4 46 30 46Zm0-8c3.9 0 7-3.1 7-7s-3.1-7-7-7-7 3.1-7 7 3.1 7 7 7Z" fill="#fff"/>
+  <circle cx="44" cy="44" r="9" fill="#82f34d"/>
+</svg>

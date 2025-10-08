@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48" role="img" aria-label="Web app">
+  <rect width="48" height="48" rx="14" fill="#101010"/>
+  <path d="M11 15h26v18H11V15Zm3 4v11h20V19H14Z" fill="#fff"/>
+  <path d="M18 37h12" stroke="#82f34d" stroke-width="4" stroke-linecap="round"/>
+</svg>
