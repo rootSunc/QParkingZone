@@ -82,6 +82,34 @@ For a production-style static frontend and private backend network:
 docker compose -f infra/docker/docker-compose.prod.yml up -d --build
 ```
 
+### VPS Deployment
+
+For a public repository, keep GitHub Actions on GitHub-hosted runners and let the
+VPS pull deployments itself. The timer in `infra/vps` polls `origin/main`,
+checks that the matching GitHub Actions `CI` run succeeded, then deploys with
+Docker Compose.
+
+On the VPS, install `git`, `curl`, `jq`, Docker, and Docker Compose. Clone the
+repository to `/opt/QParkingZone`, then install the timer:
+
+```bash
+cd /opt/QParkingZone
+sudo cp infra/vps/qparking-deploy.service /etc/systemd/system/
+sudo cp infra/vps/qparking-deploy.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now qparking-deploy.timer
+```
+
+Run a deployment immediately and inspect logs:
+
+```bash
+sudo systemctl start qparking-deploy.service
+journalctl -u qparking-deploy.service -n 100 --no-pager
+```
+
+If the repository lives somewhere else, edit `/etc/systemd/system/qparking-deploy.service`
+and change `WorkingDirectory`, `QPARKING_APP_DIR`, and `ExecStart`.
+
 ## Real Data
 
 The app ships with development seed data in `apps/api/database/seed.sql`. To replace it with real parking data from OpenStreetMap:

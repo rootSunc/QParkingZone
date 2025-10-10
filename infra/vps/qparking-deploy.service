@@ -1,0 +1,15 @@
+[Unit]
+Description=Deploy QParkingZone from GitHub
+Wants=network-online.target docker.service
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/QParkingZone
+Environment=QPARKING_APP_DIR=/opt/QParkingZone
+Environment=QPARKING_REPO_OWNER=rootSunc
+Environment=QPARKING_REPO_NAME=QParkingZone
+Environment=QPARKING_BRANCH=main
+Environment=QPARKING_REQUIRE_CI=true
+Environment=QPARKING_STATE_FILE=/var/lib/qparking-zone/deployed-sha
+ExecStart=/opt/QParkingZone/infra/vps/deploy.sh
