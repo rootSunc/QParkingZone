@@ -3,20 +3,19 @@ services:
     build:
       context: ../../apps/api
       dockerfile: ../../infra/docker/backend.Dockerfile
-    container_name: parking-zones-backend
-    command: sh -lc "php scripts/init-db.php && php -S 0.0.0.0:8000 -t public"
+    command: sh -lc "php scripts/init-db.php && apache2-foreground"
     environment:
       APP_ENV: production
       APP_DEBUG: "false"
       PARKING_ZONES_AUTO_SEED: "true"
       PARKING_ZONES_DB_PATH: /app/var/zones.sqlite
     expose:
-      - "8000"
+      - "80"
     restart: unless-stopped
     volumes:
       - parking-zones-data:/app/var
     healthcheck:
-      test: ["CMD-SHELL", "php -r 'exit(@file_get_contents(\"http://127.0.0.1:8000/api/health\") === false ? 1 : 0);'"]
+      test: ["CMD-SHELL", "php -r 'exit(@file_get_contents(\"http://127.0.0.1/api/health\") === false ? 1 : 0);'"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -25,7 +24,6 @@ services:
     build:
       context: ../../apps/web
       dockerfile: ../../infra/docker/frontend.Dockerfile
-    container_name: parking-zones-frontend
     depends_on:
       backend:
         condition: service_healthy
@@ -40,7 +38,6 @@ services:
 
   caddy:
     image: caddy:2.10-alpine
-    container_name: parking-zones-caddy
     depends_on:
       frontend:
         condition: service_healthy
