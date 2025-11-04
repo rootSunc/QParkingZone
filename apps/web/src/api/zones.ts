@@ -1,36 +1,15 @@
 import type { CitySlug } from '@/config/cities'
 import type { ZoneSort } from '@/composables/useZoneCatalogRoute'
+import type { ZoneDetail, ZoneFacets, ZonesPage } from './openapi-types'
 
-export interface ZoneSummary {
-  id: number
-  name: string
-  city: CitySlug
-  type: string
-  status: string
-  hourlyRateEur: number
-  latitude: number
-  longitude: number
-  openingHours: OpeningHours
-  distanceKm?: number
-}
-
-export interface OpeningHours {
-  weekdays: string
-  weekends: string
-}
-
-export interface ZoneDetail extends ZoneSummary {
-  description: string
-  maxCapacity: number
-  amenities: string[]
-}
-
-export interface ZonesPage {
-  items: ZoneSummary[]
-  total: number
-  page: number
-  limit: number
-}
+export type {
+  OpeningHours,
+  ZoneDetail,
+  ZoneFacetOption,
+  ZoneFacets,
+  ZoneSummary,
+  ZonesPage,
+} from './openapi-types'
 
 export interface FetchZonesParams {
   city: CitySlug
@@ -112,4 +91,10 @@ export async function fetchZones(
 
 export async function fetchZone(id: string | number, signal?: AbortSignal): Promise<ZoneDetail> {
   return readJson(await fetch(`/api/zones/${id}`, { signal }))
+}
+
+export async function fetchZoneFacets(city: CitySlug, signal?: AbortSignal): Promise<ZoneFacets> {
+  const params = new URLSearchParams({ city })
+
+  return readJson(await fetch(`/api/zones/facets?${params.toString()}`, { signal }))
 }

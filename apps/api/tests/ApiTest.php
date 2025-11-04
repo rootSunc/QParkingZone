@@ -27,7 +27,12 @@ final class ApiTest extends TestCase
 
         $this->app = ApplicationFactory::create(
             $pdo,
-            new AppConfig(false, __DIR__ . '/../var/zones.sqlite', true),
+            new AppConfig(
+                debug: false,
+                databasePath: __DIR__ . '/../var/zones.sqlite',
+                autoSeed: true,
+                accessLogEnabled: false
+            ),
             $this->currentTime
         );
         $this->requestFactory = new ServerRequestFactory();
@@ -108,6 +113,34 @@ final class ApiTest extends TestCase
         }
     }
 
+    public function testGetZoneFacetsReturnsCityScopedFilterMetadata(): void
+    {
+        $response = $this->request('GET', '/api/zones/facets?city=helsinki');
+        $data = $this->decodeJson($response);
+
+        $this->assertSame(200, $response->getStatusCode());
+        $this->assertSame('helsinki', $data['city']);
+        $this->assertSame([
+            ['value' => 'commercial', 'count' => 3],
+            ['value' => 'street', 'count' => 2],
+        ], $data['types']);
+        $this->assertSame([
+            ['value' => 'active', 'count' => 4],
+            ['value' => 'inactive', 'count' => 1],
+        ], $data['statuses']);
+        $this->assertContains(['value' => 'EV Charging', 'count' => 2], $data['amenities']);
+        $this->assertContains(['value' => 'Indoor Parking', 'count' => 2], $data['amenities']);
+    }
+
+    public function testGetZoneFacetsRejectsUnsupportedCity(): void
+    {
+        $response = $this->request('GET', '/api/zones/facets?city=turku');
+        $data = $this->decodeJson($response);
+
+        $this->assertSame(400, $response->getStatusCode());
+        $this->assertSame(['error' => 'Unsupported city. Use helsinki, espoo, or vantaa.'], $data);
+    }
+
     public function testGetZonesCanSortByDistanceWhenCoordinatesAreProvided(): void
     {
         $response = $this->request('GET', '/api/zones?city=helsinki&sort=distance_asc&lat=60.1670&lng=24.9475');
@@ -152,7 +185,18 @@ final class ApiTest extends TestCase
         $data = $this->decodeJson($response);
 
         $this->assertSame(200, $response->getStatusCode());
-        $this->assertSame(['status' => 'ok', 'zones' => 12], $data);
+        $this->assertSame('ok', $data['status']);
+        $this->assertSame('ok', $data['database']);
+        $this->assertSame(12, $data['zones']);
+        $this->assertArrayHasKey('checkedAt', $data);
+        $this->assertNotFalse(DateTimeImmutable::createFromFormat(DATE_ATOM, $data['checkedAt']));
+    }
+
+    public function testResponsesIncludeRequestIdHeader(): void
+    {
+        $response = $this->request('GET', '/api/health', ['X-Request-Id' => 'test-request-123']);
+
+        $this->assertSame('test-request-123', $response->getHeaderLine('X-Request-Id'));
     }
 
     public function testGetZoneByIdReturnsContractedDetailPayload(): void
@@ -243,7 +287,12 @@ final class ApiTest extends TestCase
 
         $this->app = ApplicationFactory::create(
             $pdo,
-            new AppConfig(false, __DIR__ . '/../var/zones.sqlite', true),
+            new AppConfig(
+                debug: false,
+                databasePath: __DIR__ . '/../var/zones.sqlite',
+                autoSeed: true,
+                accessLogEnabled: false
+            ),
             $this->currentTime
         );
 
@@ -251,12 +300,18 @@ final class ApiTest extends TestCase
         $data = $this->decodeJson($response);
 
         $this->assertSame(500, $response->getStatusCode());
-        $this->assertSame(['error' => 'Internal server error'], $data);
+        $this->assertSame('Internal server error', $data['error']);
+        $this->assertArrayHasKey('requestId', $data);
+        $this->assertSame($data['requestId'], $response->getHeaderLine('X-Request-Id'));
     }
 
-    private function request(string $method, string $path): ResponseInterface
+    private function request(string $method, string $path, array $headers = []): ResponseInterface
     {
         $request = $this->requestFactory->createServerRequest($method, $path);
+
+        foreach ($headers as $name => $value) {
+            $request = $request->withHeader($name, $value);
+        }
 
         return $this->app->handle($request);
     }

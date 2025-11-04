@@ -31,6 +31,21 @@ async function mockZonesApi(page: Page) {
     })
   })
 
+  await page.route('**/api/zones/facets?**', async (route) => {
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        city: 'helsinki',
+        types: [{ value: 'commercial', count: 1 }],
+        statuses: [{ value: 'active', count: 1 }],
+        amenities: [
+          { value: 'EV Charging', count: 1 },
+          { value: 'Indoor Parking', count: 1 },
+        ],
+      }),
+    })
+  })
+
   await page.route('**/api/zones?**', async (route) => {
     await route.fulfill({
       contentType: 'application/json',

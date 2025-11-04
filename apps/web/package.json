@@ -12,9 +12,15 @@
     "test:e2e": "playwright test",
     "build-only": "vite build",
     "type-check": "vue-tsc --build",
-    "lint": "run-s lint:*",
-    "lint:oxlint": "oxlint . --fix",
-    "lint:eslint": "eslint . --fix --cache",
+    "api-types:generate": "node scripts/generate-openapi-types.mjs",
+    "api-types:check": "node scripts/generate-openapi-types.mjs --check",
+    "lint": "npm run lint:check",
+    "lint:check": "run-s lint:oxlint:check lint:eslint:check",
+    "lint:fix": "run-s lint:oxlint:fix lint:eslint:fix",
+    "lint:oxlint:check": "oxlint .",
+    "lint:oxlint:fix": "oxlint . --fix",
+    "lint:eslint:check": "eslint . --cache",
+    "lint:eslint:fix": "eslint . --fix --cache",
     "format": "prettier --write --experimental-cli src/"
   },
   "dependencies": {

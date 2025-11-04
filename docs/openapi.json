@@ -1,0 +1,479 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "QParking Zones API",
+    "version": "0.1.0",
+    "description": "JSON API for searching parking zones and reading parking-zone details."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8000",
+      "description": "Local API server"
+    }
+  ],
+  "paths": {
+    "/api/health": {
+      "get": {
+        "summary": "Read API health",
+        "operationId": "getHealth",
+        "responses": {
+          "200": {
+            "description": "Health summary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/zones": {
+      "get": {
+        "summary": "Search parking-zone summaries",
+        "operationId": "getZones",
+        "parameters": [
+          {
+            "name": "city",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/CitySlug"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["active", "inactive"]
+            }
+          },
+          {
+            "name": "open_now",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "lat",
+            "in": "query",
+            "schema": {
+              "type": "number",
+              "minimum": -90,
+              "maximum": 90
+            }
+          },
+          {
+            "name": "lng",
+            "in": "query",
+            "schema": {
+              "type": "number",
+              "minimum": -180,
+              "maximum": 180
+            }
+          },
+          {
+            "name": "radius",
+            "in": "query",
+            "schema": {
+              "type": "number",
+              "minimum": 0.1,
+              "maximum": 500
+            }
+          },
+          {
+            "name": "amenities",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "description": "Comma-separated amenity names."
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["name", "price_asc", "price_desc", "distance_asc"]
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated zone summaries",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ZonesPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query parameter",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/zones/facets": {
+      "get": {
+        "summary": "Read zone filter metadata",
+        "operationId": "getZoneFacets",
+        "parameters": [
+          {
+            "name": "city",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/CitySlug"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Filter metadata scoped to the requested city",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ZoneFacets"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid city",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/zones/{id}": {
+      "get": {
+        "summary": "Read one parking-zone detail",
+        "operationId": "getZone",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Zone detail",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ZoneDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Zone not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "CitySlug": {
+        "type": "string",
+        "enum": ["helsinki", "espoo", "vantaa"]
+      },
+      "HealthResponse": {
+        "type": "object",
+        "required": ["status", "database", "zones", "checkedAt"],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["ok"]
+          },
+          "database": {
+            "type": "string",
+            "enum": ["ok"]
+          },
+          "zones": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "checkedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "OpeningHours": {
+        "type": "object",
+        "required": ["weekdays", "weekends"],
+        "properties": {
+          "weekdays": {
+            "type": "string"
+          },
+          "weekends": {
+            "type": "string"
+          }
+        }
+      },
+      "ZoneSummary": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "city",
+          "type",
+          "status",
+          "hourlyRateEur",
+          "latitude",
+          "longitude",
+          "amenities",
+          "openingHours"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "city": {
+            "$ref": "#/components/schemas/CitySlug"
+          },
+          "type": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["active", "inactive"]
+          },
+          "hourlyRateEur": {
+            "type": "number"
+          },
+          "latitude": {
+            "type": "number"
+          },
+          "longitude": {
+            "type": "number"
+          },
+          "amenities": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "openingHours": {
+            "$ref": "#/components/schemas/OpeningHours"
+          },
+          "distanceKm": {
+            "type": "number"
+          }
+        }
+      },
+      "ZoneDetail": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "city",
+          "type",
+          "status",
+          "description",
+          "maxCapacity",
+          "hourlyRateEur",
+          "latitude",
+          "longitude",
+          "amenities",
+          "openingHours"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "city": {
+            "$ref": "#/components/schemas/CitySlug"
+          },
+          "type": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["active", "inactive"]
+          },
+          "description": {
+            "type": "string"
+          },
+          "maxCapacity": {
+            "type": "integer"
+          },
+          "hourlyRateEur": {
+            "type": "number"
+          },
+          "latitude": {
+            "type": "number"
+          },
+          "longitude": {
+            "type": "number"
+          },
+          "amenities": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "openingHours": {
+            "$ref": "#/components/schemas/OpeningHours"
+          },
+          "distanceKm": {
+            "type": "number"
+          }
+        }
+      },
+      "ZonesPage": {
+        "type": "object",
+        "required": ["items", "total", "page", "limit"],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ZoneSummary"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      },
+      "ZoneFacetOption": {
+        "type": "object",
+        "required": ["value", "count"],
+        "properties": {
+          "value": {
+            "type": "string"
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "ZoneFacets": {
+        "type": "object",
+        "required": ["city", "types", "statuses", "amenities"],
+        "properties": {
+          "city": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/CitySlug"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "types": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ZoneFacetOption"
+            }
+          },
+          "statuses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ZoneFacetOption"
+            }
+          },
+          "amenities": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ZoneFacetOption"
+            }
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "requestId": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

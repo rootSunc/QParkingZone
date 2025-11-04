@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { fetchZones, type ZonesPage } from '@/api/zones'
+import { fetchZoneFacets, fetchZones, type ZoneFacets, type ZonesPage } from '@/api/zones'
 import { isAbortError, useAbortableRequest } from '@/composables/useAbortableRequest'
 import { useBrowserGeolocation } from '@/composables/useBrowserGeolocation'
 import { useCitySelection } from '@/composables/useCitySelection'
@@ -22,11 +22,18 @@ const pageData = ref<ZonesPage>({
   page: 1,
   limit: defaultZonePageSize,
 })
+const facets = ref<ZoneFacets>({
+  city: null,
+  types: [],
+  statuses: [],
+  amenities: [],
+})
 const loading = ref(false)
 const error = ref('')
 const { selectedCityLabel } = useCitySelection(() => route.query)
 const catalogState = computed(() => parseZoneCatalogQuery(route.query))
-const { beginRequest } = useAbortableRequest()
+const { beginRequest: beginZonesRequest } = useAbortableRequest()
+const { beginRequest: beginFacetsRequest } = useAbortableRequest()
 const { locating, locationError, clearLocationError, locateUser: requestUserLocation } = useBrowserGeolocation()
 
 const zones = computed(() => {
@@ -34,7 +41,9 @@ const zones = computed(() => {
 })
 
 const availableTypes = computed(() => {
-  return [...new Set(zones.value.map((zone) => zone.type))]
+  const values = facets.value.types.map((facet) => facet.value)
+
+  return values.length > 0 ? values : [...new Set(zones.value.map((zone) => zone.type))]
 })
 
 const searchQuery = computed({
@@ -85,16 +94,9 @@ const activeAmenities = computed(() => {
   return catalogState.value.amenities
 })
 
-const ALL_AMENITIES = [
-  'Ticket Machine',
-  'Indoor Parking',
-  'Retail Validation',
-  'Paved Surface',
-  'Park and Ride Access',
-  'Train Station Nearby',
-  'EV Charging',
-  'Security Cameras'
-]
+const availableAmenities = computed(() => {
+  return facets.value.amenities.map((facet) => facet.value)
+})
 
 const hasLocation = computed(() => {
   return catalogState.value.lat !== null && catalogState.value.lng !== null
@@ -230,7 +232,7 @@ function goToPage(nextPage: number) {
 }
 
 async function loadZones(state: ZoneCatalogQueryState) {
-  const request = beginRequest()
+  const request = beginZonesRequest()
   loading.value = true
   error.value = ''
 
@@ -268,6 +270,36 @@ async function loadZones(state: ZoneCatalogQueryState) {
   }
 }
 
+async function loadFacets(city: ZoneCatalogQueryState['city']) {
+  const request = beginFacetsRequest()
+
+  try {
+    const data = await fetchZoneFacets(city, request.controller.signal)
+
+    if (!request.isCurrent()) {
+      return
+    }
+
+    facets.value = data
+  } catch (err) {
+    if (!request.isCurrent() || isAbortError(err)) {
+      return
+    }
+
+    facets.value = {
+      city,
+      types: [],
+      statuses: [],
+      amenities: [],
+    }
+  } finally {
+    if (request.isCurrent()) {
+      request.finish()
+    }
+  }
+}
+
+watch(() => catalogState.value.city, loadFacets, { immediate: true })
 watch(catalogState, loadZones, { immediate: true })
 </script>
 
@@ -452,10 +484,10 @@ watch(catalogState, loadZones, { immediate: true })
         </button>
       </div>
 
-      <div class="type-hints" style="margin-top: 14px;">
+      <div class="type-hints type-hints-spaced">
         <span class="type-hints-label">Amenities</span>
         <button
-          v-for="amenity in ALL_AMENITIES"
+          v-for="amenity in availableAmenities"
           :key="amenity"
           type="button"
           class="type-hint-chip"
@@ -997,6 +1029,10 @@ watch(catalogState, loadZones, { immediate: true })
   align-items: center;
   gap: 10px;
   margin-top: 18px;
+}
+
+.type-hints-spaced {
+  margin-top: 14px;
 }
 
 .active-filters-label,

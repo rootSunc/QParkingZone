@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { fetchZone, fetchZones } from '@/api/zones'
+import { fetchZone, fetchZoneFacets, fetchZones } from '@/api/zones'
 
 describe('zones api', () => {
   afterEach(() => {
@@ -82,6 +82,33 @@ describe('zones api', () => {
 
     expect(fetch).toHaveBeenCalledWith('/api/zones/1', { signal: undefined })
     expect(result).toEqual(mockZone)
+  })
+
+  it('returns parsed zone facets', async () => {
+    const mockFacets = {
+      city: 'helsinki',
+      types: [
+        { value: 'commercial', count: 3 },
+        { value: 'street', count: 2 },
+      ],
+      statuses: [
+        { value: 'active', count: 4 },
+        { value: 'inactive', count: 1 },
+      ],
+      amenities: [
+        { value: 'EV Charging', count: 2 },
+      ],
+    }
+
+    vi.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => mockFacets,
+    } as Response)
+
+    const result = await fetchZoneFacets('helsinki')
+
+    expect(fetch).toHaveBeenCalledWith('/api/zones/facets?city=helsinki', { signal: undefined })
+    expect(result).toEqual(mockFacets)
   })
 
   it('throws when the request fails', async () => {
