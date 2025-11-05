@@ -15,7 +15,7 @@ QParking Zones is a polished full-stack showcase for discovering parking areas a
 - Discover nearby parking with browser geolocation and distance-based sorting
 - Open detail pages with pricing, capacity, opening status, amenities, coordinates, and maps
 - Import real parking locations from `OpenStreetMap + Overpass API`
-- Run the full stack locally, through Docker Compose, or as a production-style Nginx/API setup
+- Run the full stack locally, through Docker Compose, or as a production-style Nginx/Apache setup
 - Validate behavior with PHPUnit, Vitest, Playwright, linting, audits, and CI checks
 
 ## Product Preview
@@ -43,7 +43,7 @@ flowchart LR
 | Web | Catalog, filters, detail pages, maps | `Vue 3`, `TypeScript`, `Vite`, `Vue Router`, `Leaflet` |
 | API | Validated JSON endpoints and query contracts | `PHP 8.3`, `Slim 4`, `PDO` |
 | Data | Seed data, OSM imports, deterministic upserts | `SQLite`, schema constraints, source metadata |
-| Delivery | Repeatable local and production-style runtime | `Docker`, `Docker Compose`, `Nginx`, `Caddy` |
+| Delivery | Repeatable local and production-style runtime | `Docker`, `Docker Compose`, `Nginx`, `Apache`, `Caddy` |
 
 ## Quick Start
 
@@ -123,9 +123,13 @@ The importer stores source metadata and upserts by source identity, so repeated 
 
 ## API Snapshot
 
+The OpenAPI contract lives at `docs/openapi.json`; the web app generates its
+API response types from that contract.
+
 | Endpoint | Description |
 | --- | --- |
 | `GET /api/zones` | Paginated parking-zone summaries with city, keyword, type, status, amenity, open-now, distance, radius, sort, page, and limit filters |
+| `GET /api/zones/facets` | City-scoped filter metadata for zone types, statuses, and amenities |
 | `GET /api/zones/{id}` | Full detail payload for one parking zone |
 | `GET /api/health` | Lightweight health and zone-count response |
 
@@ -138,14 +142,16 @@ make ci
 make test
 make test-e2e
 make audit
+make contract
 make build
+make smoke
 ```
 
 Individual app checks:
 
 ```bash
 cd apps/api && composer test
-cd apps/web && npm run lint && npm run test:run && npm run build && npm run test:e2e
+cd apps/web && npm run lint && npm run api-types:check && npm run test:run && npm run build && npm run test:e2e
 ```
 
 ## Project Structure
