@@ -7,7 +7,9 @@
 ![Docker](https://img.shields.io/badge/Docker-ready-2496ed)
 ![CI](https://img.shields.io/badge/CI-GitHub_Actions-24292f)
 
-QParking Zones is a polished full-stack showcase for discovering parking areas across Helsinki, Espoo, and Vantaa. It pairs a responsive Vue search experience with a Slim API, deterministic OpenStreetMap imports, SQLite persistence, Docker delivery, and automated test coverage.
+QParking Zones is a full-stack demo for browsing parking areas across Helsinki,
+Espoo, and Vantaa. It combines a Vue catalog UI, a Slim API, OpenStreetMap
+imports, SQLite storage, Docker delivery, and automated tests.
 
 ## Highlights
 
@@ -28,22 +30,82 @@ QParking Zones is a polished full-stack showcase for discovering parking areas a
 
 ```mermaid
 flowchart LR
-  User["Browser"] --> Web["Vue 3 + Vite SPA"]
-  Web --> Router["Vue Router URL state"]
-  Web --> Api["Slim 4 JSON API"]
-  Api --> Repo["Zone repository"]
-  Repo --> DB[("SQLite")]
-  Importer["OSM importer"] --> DB
-  Web --> Maps["Leaflet + OpenStreetMap"]
-  CI["GitHub Actions"] --> Checks["PHPUnit + Vitest + Playwright + Docker"]
+  subgraph Client["Client"]
+    direction TB
+    Browser["Browser<br/>search, filters, location"]
+  end
+
+  subgraph Web["Frontend · Vue 3 + Vite"]
+    direction TB
+    Router["Vue Router<br/>shareable URL state"]
+    Catalog["Zone catalog<br/>search · facets · pagination"]
+    Detail["Zone detail<br/>pricing · hours · map"]
+    ApiClient["API client<br/>OpenAPI typed responses"]
+
+    Router --> Catalog
+    Router --> Detail
+    Catalog --> ApiClient
+    Detail --> ApiClient
+  end
+
+  subgraph Api["Backend · Slim 4"]
+    direction TB
+    Routes["JSON routes<br/>zones · facets · health"]
+    Parser["Query parser<br/>validation and bounds"]
+    Repo["Zone repository<br/>filters · distance · open-now"]
+    Trace["Request tracing<br/>request id · access logs"]
+
+    Routes --> Parser
+    Parser --> Repo
+    Routes --> Trace
+  end
+
+  subgraph Data["Data & contracts"]
+    direction TB
+    DB[("SQLite<br/>zones and source metadata")]
+    Importer["OSM importer<br/>Overpass upserts"]
+    Contract["OpenAPI<br/>docs/openapi.json"]
+
+    Importer --> DB
+  end
+
+  subgraph Delivery["Delivery & checks"]
+    direction TB
+    Runtime["Docker Compose<br/>Apache API · Nginx SPA"]
+    Edge["Caddy HTTPS<br/>optional VPS edge"]
+    CI["GitHub Actions<br/>test · audit · build · smoke"]
+
+    Edge --> Runtime
+  end
+
+  Browser --> Router
+  ApiClient --> Routes
+  Repo --> DB
+  Contract --> ApiClient
+  Runtime --> Routes
+  Runtime --> Router
+  CI -.-> Contract
+  CI -.-> Runtime
+
+  classDef client fill:#eef6ff,stroke:#2563eb,color:#0f172a
+  classDef web fill:#ecfdf5,stroke:#16a34a,color:#052e16
+  classDef api fill:#fff7ed,stroke:#ea580c,color:#431407
+  classDef data fill:#f8fafc,stroke:#64748b,color:#0f172a
+  classDef ops fill:#f5f3ff,stroke:#7c3aed,color:#1e1b4b
+
+  class Browser client
+  class Router,Catalog,Detail,ApiClient web
+  class Routes,Parser,Repo,Trace api
+  class DB,Importer,Contract data
+  class Runtime,Edge,CI ops
 ```
 
 | Area | Purpose | Stack |
 | --- | --- | --- |
-| Web | Catalog, filters, detail pages, maps | `Vue 3`, `TypeScript`, `Vite`, `Vue Router`, `Leaflet` |
-| API | Validated JSON endpoints and query contracts | `PHP 8.3`, `Slim 4`, `PDO` |
-| Data | Seed data, OSM imports, deterministic upserts | `SQLite`, schema constraints, source metadata |
-| Delivery | Repeatable local and production-style runtime | `Docker`, `Docker Compose`, `Nginx`, `Apache`, `Caddy` |
+| Client | Catalog browsing, URL state, details, and map handoff | `Vue 3`, `TypeScript`, `Vite`, `Vue Router`, `Leaflet` |
+| API | Validated JSON endpoints, facets, health, and request tracing | `PHP 8.3`, `Slim 4`, `PDO` |
+| Data | Seed data, OSM imports, deterministic upserts, and API contract | `SQLite`, `OpenStreetMap`, `Overpass API`, `OpenAPI` |
+| Delivery | Repeatable local, production-style, and smoke-tested runtime | `Docker`, `Docker Compose`, `Apache`, `Nginx`, `Caddy`, `GitHub Actions` |
 
 ## Quick Start
 
@@ -119,7 +181,9 @@ cd apps/api
 php scripts/import-zones.php
 ```
 
-The importer stores source metadata and upserts by source identity, so repeated imports refresh existing rows instead of creating duplicates. Live occupancy integrations are intentionally left behind feature flags/placeholders for future provider work.
+The importer stores source metadata and upserts by source identity, so repeated
+imports refresh existing rows instead of creating duplicates. Live occupancy
+provider integrations are not implemented in this demo.
 
 ## API Snapshot
 
