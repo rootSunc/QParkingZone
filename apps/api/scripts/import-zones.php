@@ -8,7 +8,10 @@ use ParkingZones\Config\AppConfig;
 use ParkingZones\Infrastructure\Database;
 
 const SOURCE_PROVIDER = 'openstreetmap';
-const OVERPASS_URL = 'https://overpass-api.de/api/interpreter';
+const DEFAULT_OVERPASS_URLS = [
+    'https://overpass-api.de/api/interpreter',
+    'https://overpass.private.coffee/api/interpreter',
+];
 const CITY_BOUNDS = [
     'helsinki' => ['minLat' => 60.10, 'minLon' => 24.80, 'maxLat' => 60.32, 'maxLon' => 25.25],
     'espoo' => ['minLat' => 60.10, 'minLon' => 24.45, 'maxLat' => 60.35, 'maxLon' => 24.90],
@@ -16,19 +19,18 @@ const CITY_BOUNDS = [
 ];
 
 $config = AppConfig::fromEnvironment();
-$pdo = Database::sqliteFile($config->databasePath, false);
-
-Database::initializeSqliteDatabase(
-    $pdo,
-    dirname(__DIR__) . '/database/schema.sql',
-    dirname(__DIR__) . '/database/seed.sql',
-    false
-);
+$pdo = Database::sqliteFile($config->databasePath, $config->autoSeed);
 
 echo "Initialized database at {$config->databasePath}\n";
 echo "Fetching parking zones from OpenStreetMap via Overpass API...\n";
 
-$elements = fetchParkingElements();
+try {
+    $elements = fetchParkingElements();
+} catch (Throwable $exception) {
+    fwrite(STDERR, "Import failed before database changes: {$exception->getMessage()}\n");
+    exit(1);
+}
+
 echo sprintf("Retrieved %d raw parking elements.\n", count($elements));
 
 $importedAt = new DateTimeImmutable('now', new DateTimeZone('UTC'));
@@ -137,6 +139,45 @@ function fetchParkingElements(): array
 );
 out center 1500;';
 
+    $errors = [];
+
+    foreach (overpassUrls() as $url) {
+        echo "Trying Overpass endpoint {$url}...\n";
+
+        try {
+            return fetchParkingElementsFromUrl($url, $overpassQuery);
+        } catch (Throwable $exception) {
+            $errors[] = "{$url}: {$exception->getMessage()}";
+            fwrite(STDERR, "Overpass endpoint failed: {$exception->getMessage()}\n");
+        }
+    }
+
+    throw new RuntimeException(
+        'Error fetching data from Overpass API endpoints. ' . implode(' ', $errors)
+    );
+}
+
+function overpassUrls(): array
+{
+    $configured = getenv('PARKING_ZONES_OVERPASS_URLS');
+    if ($configured === false || trim($configured) === '') {
+        return DEFAULT_OVERPASS_URLS;
+    }
+
+    $urls = [];
+    foreach (explode(',', $configured) as $url) {
+        $url = trim($url);
+
+        if ($url !== '' && !in_array($url, $urls, true)) {
+            $urls[] = $url;
+        }
+    }
+
+    return $urls !== [] ? $urls : DEFAULT_OVERPASS_URLS;
+}
+
+function fetchParkingElementsFromUrl(string $url, string $overpassQuery): array
+{
     $context = stream_context_create([
         'http' => [
             'header' => "Content-type: application/x-www-form-urlencoded\r\nUser-Agent: QParkingZones/1.0\r\n",
@@ -145,18 +186,41 @@ out center 1500;';
             'timeout' => 35,
         ],
     ]);
-    $response = file_get_contents(OVERPASS_URL, false, $context);
+    $response = @file_get_contents($url, false, $context);
 
     if ($response === false) {
-        throw new RuntimeException('Error fetching data from Overpass API.');
+        $statusLine = httpStatusLine($http_response_header ?? []);
+        $message = 'Request failed';
+
+        if ($statusLine !== null) {
+            $message .= " ({$statusLine})";
+        }
+
+        throw new RuntimeException($message . '.');
     }
 
-    $data = json_decode($response, true, 512, JSON_THROW_ON_ERROR);
+    try {
+        $data = json_decode($response, true, 512, JSON_THROW_ON_ERROR);
+    } catch (JsonException $exception) {
+        throw new RuntimeException('Overpass API returned invalid JSON.', 0, $exception);
+    }
+
     if (!is_array($data) || !isset($data['elements']) || !is_array($data['elements'])) {
         throw new RuntimeException('Overpass API returned an unexpected payload.');
     }
 
     return $data['elements'];
+}
+
+function httpStatusLine(array $headers): ?string
+{
+    foreach ($headers as $header) {
+        if (is_string($header) && str_starts_with($header, 'HTTP/')) {
+            return $header;
+        }
+    }
+
+    return null;
 }
 
 function normalizeParkingElement(array $element, DateTimeImmutable $importedAt): ?array
