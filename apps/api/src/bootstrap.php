@@ -2,6 +2,8 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/Config/AppConfig.php';
+require_once __DIR__ . '/Domain/DistanceCalculator.php';
+require_once __DIR__ . '/Domain/OpeningHoursEvaluator.php';
 require_once __DIR__ . '/Http/InvalidQueryParameter.php';
 require_once __DIR__ . '/Http/AccessLogMiddleware.php';
 require_once __DIR__ . '/Http/JsonResponder.php';
