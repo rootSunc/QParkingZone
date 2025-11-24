@@ -36,6 +36,10 @@ CREATE INDEX IF NOT EXISTS idx_zones_city ON zones (city);
 CREATE INDEX IF NOT EXISTS idx_zones_type ON zones (type);
 CREATE INDEX IF NOT EXISTS idx_zones_status ON zones (status);
 CREATE INDEX IF NOT EXISTS idx_zones_name ON zones (name);
+CREATE INDEX IF NOT EXISTS idx_zones_lat_lng ON zones (latitude, longitude);
+CREATE INDEX IF NOT EXISTS idx_zones_hourly_rate ON zones (hourly_rate_eur);
+CREATE INDEX IF NOT EXISTS idx_zones_city_type ON zones (city, type);
+CREATE INDEX IF NOT EXISTS idx_zones_city_status ON zones (city, status);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_zones_source_identity
   ON zones (source_provider, source_external_id)
   WHERE source_external_id IS NOT NULL;

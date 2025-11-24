@@ -3,7 +3,10 @@ declare(strict_types=1);
 
 namespace ParkingZones\Infrastructure;
 
+use DateTimeImmutable;
 use PDO;
+use ParkingZones\Domain\DistanceCalculator;
+use ParkingZones\Domain\OpeningHoursEvaluator;
 use RuntimeException;
 use Throwable;
 
@@ -18,11 +21,38 @@ final class Database
         return $pdo;
     }
 
-    public static function sqliteFile(string $path, bool $autoSeed = true): PDO
-    {
+    /**
+     * Open an existing SQLite database for request handling (no schema migration).
+     */
+    public static function connectSqliteFile(
+        string $path,
+        ?DateTimeImmutable $currentTime = null
+    ): PDO {
+        if (!is_file($path)) {
+            throw new RuntimeException(sprintf(
+                'Database file "%s" does not exist. Run scripts/init-db.php first.',
+                $path
+            ));
+        }
+
+        $pdo = self::connect('sqlite:' . $path);
+        self::configureSqliteConnection($pdo, $currentTime);
+
+        return $pdo;
+    }
+
+    /**
+     * Create/migrate schema and optionally seed, then return a tuned connection.
+     */
+    public static function sqliteFile(
+        string $path,
+        bool $autoSeed = true,
+        ?DateTimeImmutable $currentTime = null
+    ): PDO {
         self::ensureDirectoryExists(dirname($path));
 
         $pdo = self::connect('sqlite:' . $path);
+        self::configureSqliteConnection($pdo, $currentTime);
 
         self::initializeSqliteDatabase(
             $pdo,
@@ -32,6 +62,61 @@ final class Database
         );
 
         return $pdo;
+    }
+
+    public static function configureSqliteConnection(
+        PDO $pdo,
+        ?DateTimeImmutable $currentTime = null
+    ): void {
+        $pdo->exec('PRAGMA journal_mode=WAL');
+        $pdo->exec('PRAGMA busy_timeout=5000');
+        self::registerSqliteFunctions($pdo, $currentTime);
+    }
+
+    public static function registerSqliteFunctions(
+        PDO $pdo,
+        ?DateTimeImmutable $currentTime = null
+    ): void {
+        $distance = new DistanceCalculator();
+        $hours = new OpeningHoursEvaluator($currentTime);
+
+        $pdo->sqliteCreateFunction(
+            'distance_km',
+            static fn (
+                mixed $lat1,
+                mixed $lng1,
+                mixed $lat2,
+                mixed $lng2
+            ): float => $distance->calculateKm(
+                (float) $lat1,
+                (float) $lng1,
+                (float) $lat2,
+                (float) $lng2
+            ),
+            4
+        );
+
+        $pdo->sqliteCreateFunction(
+            'zone_is_open_now',
+            static function (mixed $status, mixed $openingHoursJson) use ($hours): int {
+                if (!is_string($status) || !is_string($openingHoursJson)) {
+                    return 0;
+                }
+
+                try {
+                    $openingHours = json_decode($openingHoursJson, true, 512, JSON_THROW_ON_ERROR);
+                } catch (Throwable) {
+                    return 0;
+                }
+
+                if (!is_array($openingHours) || array_is_list($openingHours)) {
+                    return 0;
+                }
+
+                return $hours->isOpenNow($status, $openingHours) ? 1 : 0;
+            },
+            2
+        );
     }
 
     public static function initializeSqliteDatabase(
@@ -182,7 +267,7 @@ final class Database
 
     private static function tableHasColumn(PDO $pdo, string $table, string $column): bool
     {
-        $stmt = $pdo->query(sprintf("PRAGMA table_info(%s)", $table));
+        $stmt = $pdo->query(sprintf('PRAGMA table_info(%s)', $table));
 
         foreach ($stmt->fetchAll() as $row) {
             if (($row['name'] ?? null) === $column) {
@@ -200,6 +285,10 @@ final class Database
             'CREATE INDEX IF NOT EXISTS idx_zones_type ON zones (type)',
             'CREATE INDEX IF NOT EXISTS idx_zones_status ON zones (status)',
             'CREATE INDEX IF NOT EXISTS idx_zones_name ON zones (name)',
+            'CREATE INDEX IF NOT EXISTS idx_zones_lat_lng ON zones (latitude, longitude)',
+            'CREATE INDEX IF NOT EXISTS idx_zones_hourly_rate ON zones (hourly_rate_eur)',
+            'CREATE INDEX IF NOT EXISTS idx_zones_city_type ON zones (city, type)',
+            'CREATE INDEX IF NOT EXISTS idx_zones_city_status ON zones (city, status)',
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_zones_source_identity ON zones (source_provider, source_external_id) WHERE source_external_id IS NOT NULL",
             'CREATE INDEX IF NOT EXISTS idx_zone_availability_sources_zone_priority ON zone_availability_sources (zone_id, priority)',
             'CREATE INDEX IF NOT EXISTS idx_zone_availability_sources_provider_external ON zone_availability_sources (provider, external_id)',

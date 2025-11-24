@@ -44,6 +44,29 @@ final class DatabaseTest extends TestCase
         }
     }
 
+    public function testConnectSqliteFileOpensExistingDatabaseWithoutReseeding(): void
+    {
+        $path = tempnam(sys_get_temp_dir(), 'parking-zones-db-');
+        self::assertNotFalse($path);
+        unlink($path);
+
+        try {
+            Database::sqliteFile($path, true);
+            $pdo = Database::connectSqliteFile($path);
+            $count = (int) $pdo->query('SELECT COUNT(*) FROM zones')->fetchColumn();
+            $distance = (float) $pdo->query('SELECT distance_km(60.0, 24.0, 60.0, 24.0)')->fetchColumn();
+
+            self::assertSame(12, $count);
+            self::assertEqualsWithDelta(0.0, $distance, 0.0001);
+        } finally {
+            foreach ([$path, $path . '-wal', $path . '-shm'] as $candidate) {
+                if (file_exists($candidate)) {
+                    unlink($candidate);
+                }
+            }
+        }
+    }
+
     public function testSchemaRejectsInvalidJsonShapes(): void
     {
         $pdo = Database::connect('sqlite::memory:');
