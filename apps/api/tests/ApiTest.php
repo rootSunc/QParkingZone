@@ -52,10 +52,14 @@ final class ApiTest extends TestCase
         $this->assertSame(1, $data['page']);
         $this->assertSame(20, $data['limit']);
         $this->assertSame(
-            ['id', 'name', 'city', 'type', 'status', 'hourlyRateEur', 'latitude', 'longitude', 'amenities', 'openingHours'],
+            ['id', 'name', 'city', 'type', 'status', 'hourlyRateEur', 'latitude', 'longitude', 'amenities', 'isOpen', 'availability'],
             array_keys($data['items'][0])
         );
-        $this->assertSame(['weekdays', 'weekends'], array_keys($data['items'][0]['openingHours']));
+        $this->assertIsBool($data['items'][0]['isOpen']);
+        $this->assertSame(
+            ['state', 'badge', 'detail', 'schedule'],
+            array_keys($data['items'][0]['availability'])
+        );
     }
 
     public function testGetZonesCanBeFilteredByCity(): void
@@ -187,7 +191,7 @@ final class ApiTest extends TestCase
         $this->assertSame(200, $response->getStatusCode());
         $this->assertSame('ok', $data['status']);
         $this->assertSame('ok', $data['database']);
-        $this->assertSame(12, $data['zones']);
+        $this->assertArrayNotHasKey('zones', $data);
         $this->assertArrayHasKey('checkedAt', $data);
         $this->assertNotFalse(DateTimeImmutable::createFromFormat(DATE_ATOM, $data['checkedAt']));
     }
@@ -219,12 +223,16 @@ final class ApiTest extends TestCase
                 'longitude',
                 'amenities',
                 'openingHours',
+                'isOpen',
+                'availability',
             ],
             array_keys($data)
         );
         $this->assertSame(1, $data['id']);
         $this->assertIsArray($data['amenities']);
         $this->assertSame(['weekdays', 'weekends'], array_keys($data['openingHours']));
+        $this->assertIsBool($data['isOpen']);
+        $this->assertSame(['state', 'badge', 'detail', 'schedule'], array_keys($data['availability']));
     }
 
     public function testGetMissingZoneReturns404(): void

@@ -6,13 +6,19 @@ export type CitySlug = "helsinki" | "espoo" | "vantaa"
 export interface HealthResponse {
   status: "ok"
   database: "ok"
-  zones: number
   checkedAt: string
 }
 
 export interface OpeningHours {
   weekdays: string
   weekends: string
+}
+
+export interface ZoneAvailability {
+  state: "open" | "closed" | "inactive"
+  badge: string
+  detail: string
+  schedule: string
 }
 
 export interface ZoneSummary {
@@ -25,7 +31,8 @@ export interface ZoneSummary {
   latitude: number
   longitude: number
   amenities: string[]
-  openingHours: OpeningHours
+  isOpen: boolean
+  availability: ZoneAvailability
   distanceKm?: number
 }
 
@@ -42,6 +49,8 @@ export interface ZoneDetail {
   longitude: number
   amenities: string[]
   openingHours: OpeningHours
+  isOpen: boolean
+  availability: ZoneAvailability
   distanceKm?: number
 }
 

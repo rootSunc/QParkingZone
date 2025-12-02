@@ -25,11 +25,4 @@ final class ZoneSummaryQuery
     {
         return $this->latitude !== null && $this->longitude !== null;
     }
-
-    public function requiresInMemoryFilteringOrSorting(): bool
-    {
-        return $this->openNow
-            || $this->radius !== null
-            || $this->sort === 'distance_asc';
-    }
 }

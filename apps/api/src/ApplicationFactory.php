@@ -26,10 +26,9 @@ final class ApplicationFactory
         ?PDO $pdo = null,
         ?AppConfig $config = null,
         ?DateTimeImmutable $currentTime = null
-    ): App
-    {
+    ): App {
         $config ??= AppConfig::fromEnvironment();
-        $connection = $pdo ?? Database::sqliteFile($config->databasePath, $config->autoSeed);
+        $connection = self::resolveConnection($pdo, $config, $currentTime);
 
         $app = SlimAppFactory::create();
         $responder = new JsonResponder();
@@ -49,11 +48,14 @@ final class ApplicationFactory
         );
 
         $app->get('/api/health', function (Request $request, Response $response) use ($repository, $responder): Response {
+            $repository->ping();
+
             return $responder->respond($response, [
                 'status' => 'ok',
                 'database' => 'ok',
-                'zones' => $repository->countZones(),
                 'checkedAt' => (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format(DATE_ATOM),
+            ], 200, [
+                'Cache-Control' => 'no-store',
             ]);
         });
 
@@ -64,7 +66,12 @@ final class ApplicationFactory
                 return $responder->respond($response, ['error' => $exception->getMessage()], 400);
             }
 
-            return $responder->respond($response, $repository->fetchAllSummaries($query));
+            return $responder->respond(
+                $response,
+                $repository->fetchAllSummaries($query),
+                200,
+                ['Cache-Control' => 'public, max-age=30']
+            );
         });
 
         $app->get('/api/zones/facets', function (Request $request, Response $response) use ($repository, $responder, $queryParser): Response {
@@ -74,7 +81,12 @@ final class ApplicationFactory
                 return $responder->respond($response, ['error' => $exception->getMessage()], 400);
             }
 
-            return $responder->respond($response, $repository->fetchFacets($city));
+            return $responder->respond(
+                $response,
+                $repository->fetchFacets($city),
+                200,
+                ['Cache-Control' => 'public, max-age=60']
+            );
         });
 
         $app->get('/api/zones/{id}', function (Request $request, Response $response, array $args) use ($repository, $responder): Response {
@@ -84,9 +96,33 @@ final class ApplicationFactory
                 return $responder->respond($response, ['error' => 'Zone not found'], 404);
             }
 
-            return $responder->respond($response, $zone);
+            return $responder->respond(
+                $response,
+                $zone,
+                200,
+                ['Cache-Control' => 'public, max-age=60']
+            );
         });
 
         return $app;
+    }
+
+    private static function resolveConnection(
+        ?PDO $pdo,
+        AppConfig $config,
+        ?DateTimeImmutable $currentTime
+    ): PDO {
+        if ($pdo !== null) {
+            Database::configureSqliteConnection($pdo, $currentTime);
+
+            return $pdo;
+        }
+
+        if (is_file($config->databasePath)) {
+            return Database::connectSqliteFile($config->databasePath, $currentTime);
+        }
+
+        // First boot without an explicit init: create schema once, then request path stays connect-only.
+        return Database::sqliteFile($config->databasePath, $config->autoSeed, $currentTime);
     }
 }
