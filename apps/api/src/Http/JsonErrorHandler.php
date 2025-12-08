@@ -38,6 +38,23 @@ final class JsonErrorHandler
             $payload['exception'] = $exception::class;
         }
 
+        if ($logErrors) {
+            $message = sprintf(
+                '[%s] %s: %s in %s:%d',
+                $requestId ?? 'no-request-id',
+                $exception::class,
+                $exception->getMessage(),
+                $exception->getFile(),
+                $exception->getLine()
+            );
+
+            if ($logErrorDetails) {
+                $message .= "\n" . $exception->getTraceAsString();
+            }
+
+            error_log($message);
+        }
+
         return $this->responder->respond(
             $this->responseFactory->createResponse(),
             $payload,
