@@ -18,9 +18,13 @@ describe('zones api', () => {
           hourlyRateEur: 4.5,
           latitude: 60.1685,
           longitude: 24.9318,
-          openingHours: {
-            weekdays: '06:00-23:30',
-            weekends: '08:00-23:30',
+          amenities: ['EV Charging'],
+          isOpen: true,
+          availability: {
+            state: 'open',
+            badge: 'Open now',
+            detail: 'Closes at 23:30',
+            schedule: '06:00-23:30',
           },
           distanceKm: 1.24,
         },
@@ -70,6 +74,13 @@ describe('zones api', () => {
       openingHours: {
         weekdays: '06:00-23:00',
         weekends: '08:00-23:00',
+      },
+      isOpen: true,
+      availability: {
+        state: 'open',
+        badge: 'Open now',
+        detail: 'Closes at 23:00',
+        schedule: '06:00-23:00',
       },
     }
 

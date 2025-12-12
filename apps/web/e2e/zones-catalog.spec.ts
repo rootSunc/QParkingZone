@@ -10,9 +10,12 @@ const zoneSummary = {
   latitude: 60.1685,
   longitude: 24.9318,
   amenities: ['EV Charging', 'Indoor Parking'],
-  openingHours: {
-    weekdays: '00:00-23:59',
-    weekends: '00:00-23:59',
+  isOpen: true,
+  availability: {
+    state: 'open',
+    badge: 'Open now',
+    detail: 'Closes at 23:59',
+    schedule: '00:00-23:59',
   },
 }
 
@@ -21,6 +24,10 @@ const zoneDetail = {
   description:
     'Multi-level city-center garage connected to Kamppi shopping complex, with direct pedestrian access to the metro and bus terminal.',
   maxCapacity: 520,
+  openingHours: {
+    weekdays: '00:00-23:59',
+    weekends: '00:00-23:59',
+  },
 }
 
 async function mockZonesApi(page: Page) {
@@ -72,7 +79,7 @@ test('searches zones and opens a detail page', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Kamppi Center' }).first()).toBeVisible()
 
   await page.getByPlaceholder('Search zones...').fill('kamppi')
-  await expect(page).toHaveURL(/q=kamppi/)
+  await expect(page).toHaveURL(/q=kamppi/, { timeout: 3000 })
 
   await page.getByRole('link', { name: 'Open details' }).click()
 

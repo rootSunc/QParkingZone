@@ -2,8 +2,11 @@
 import { computed } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { useCitySelection } from '@/composables/useCitySelection'
+import { provideCurrentMinute } from '@/composables/useCurrentMinute'
 import { isCitySlug, type CitySlug } from '@/config/cities'
 import { updateZoneCatalogQuery } from '@/composables/useZoneCatalogRoute'
+
+provideCurrentMinute()
 
 const route = useRoute()
 const router = useRouter()

@@ -2,8 +2,6 @@
 import { computed } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import type { ZoneSummary } from '@/api/zones'
-import { useCurrentMinute } from '@/composables/useCurrentMinute'
-import { getZoneAvailability } from '@/utils/zoneAvailability'
 
 const props = defineProps<{
   zone: ZoneSummary
@@ -14,7 +12,6 @@ const emit = defineEmits<{
   'filter-type': [type: string]
 }>()
 const route = useRoute()
-const now = useCurrentMinute()
 
 const detailRoute = computed(() => {
   return {
@@ -28,9 +25,7 @@ const mapUrl = computed(() => {
   return `https://www.openstreetmap.org/?mlat=${props.zone.latitude}&mlon=${props.zone.longitude}#map=16/${props.zone.latitude}/${props.zone.longitude}`
 })
 
-const availability = computed(() => {
-  return getZoneAvailability(props.zone.status, props.zone.openingHours, now.value)
-})
+const availability = computed(() => props.zone.availability)
 
 function toggleTypeFilter() {
   emit('filter-type', props.zone.type)

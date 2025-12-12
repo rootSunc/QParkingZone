@@ -1,12 +1,7 @@
 import { mount } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
-import { ref } from 'vue'
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import ZoneCard from '@/components/ZoneCard.vue'
-
-vi.mock('@/composables/useCurrentMinute', () => ({
-  useCurrentMinute: () => ref(new Date('2025-01-13T10:00:00+02:00')),
-}))
 
 const DummyView = {
   template: '<div />',
@@ -51,9 +46,12 @@ async function mountZoneCard() {
         latitude: 60.1685,
         longitude: 24.9318,
         amenities: ['EV Charging', 'Indoor Parking'],
-        openingHours: {
-          weekdays: '06:00-23:30',
-          weekends: '08:00-23:30',
+        isOpen: true,
+        availability: {
+          state: 'open',
+          badge: 'Open now',
+          detail: 'Closes at 23:30',
+          schedule: '06:00-23:30',
         },
       },
     },

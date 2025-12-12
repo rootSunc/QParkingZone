@@ -1,6 +1,16 @@
-import { onMounted, onUnmounted, ref } from 'vue'
+import {
+  inject,
+  onMounted,
+  onUnmounted,
+  provide,
+  ref,
+  type InjectionKey,
+  type Ref,
+} from 'vue'
 
-export function useCurrentMinute() {
+export const currentMinuteKey: InjectionKey<Ref<Date>> = Symbol('currentMinute')
+
+function createCurrentMinuteClock(): Ref<Date> {
   const now = ref(new Date())
   let timer: number | null = null
 
@@ -32,4 +42,25 @@ export function useCurrentMinute() {
   })
 
   return now
+}
+
+/** Provide a single shared minute clock for the app shell. */
+export function provideCurrentMinute(): Ref<Date> {
+  const now = createCurrentMinuteClock()
+  provide(currentMinuteKey, now)
+  return now
+}
+
+/**
+ * Prefer the app-provided clock when available so list cards share one timer.
+ * Falls back to a local clock for isolated usage (e.g. tests without provider).
+ */
+export function useCurrentMinute(): Ref<Date> {
+  const shared = inject(currentMinuteKey, null)
+
+  if (shared !== null) {
+    return shared
+  }
+
+  return createCurrentMinuteClock()
 }
