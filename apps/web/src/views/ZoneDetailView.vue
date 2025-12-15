@@ -1,11 +1,10 @@
 <script setup lang="ts">
-import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
-import type * as Leaflet from 'leaflet'
-import type { Map as LeafletMap } from 'leaflet'
 import { fetchZone, type ZoneDetail } from '../api/zones'
 import { isAbortError, useAbortableRequest } from '@/composables/useAbortableRequest'
 import { useCurrentMinute } from '@/composables/useCurrentMinute'
+import { useZoneDetailMap } from '@/composables/useZoneDetailMap'
 import { getCityLabel } from '@/config/cities'
 import { useCitySelection } from '@/composables/useCitySelection'
 import { updateZoneCatalogQuery } from '@/composables/useZoneCatalogRoute'
@@ -18,14 +17,11 @@ const router = useRouter()
 const zone = ref<ZoneDetail | null>(null)
 const loading = ref(false)
 const error = ref('')
-const mapLoading = ref(false)
-const mapError = ref('')
 const mapElement = ref<HTMLElement | null>(null)
 const { selectedCity, selectedCityLabel } = useCitySelection(() => route.query)
 const now = useCurrentMinute()
 const { beginRequest } = useAbortableRequest()
-let map: LeafletMap | null = null
-let leafletLoader: Promise<typeof Leaflet> | null = null
+const { mapLoading, mapError, renderMap, resetMapState } = useZoneDetailMap(mapElement)
 
 const mapUrl = computed(() => {
   if (!zone.value) {
@@ -57,6 +53,7 @@ const availability = computed(() => {
     return null
   }
 
+  // Recompute on the shared minute clock so detail stays fresh; rules match the API evaluator.
   return getZoneAvailability(zone.value.status, zone.value.openingHours, now.value)
 })
 
@@ -76,72 +73,12 @@ const displayedAmenities = computed(() => {
   return hasAmenities.value ? zone.value.amenities : ['Amenity details pending']
 })
 
-function destroyMap() {
-  if (map) {
-    map.remove()
-    map = null
-  }
-}
-
-function loadLeaflet() {
-  leafletLoader ??= import('leaflet').then((module) => {
-    const moduleWithDefault = module as typeof module & { default?: typeof Leaflet }
-
-    return moduleWithDefault.default ?? module
-  })
-
-  return leafletLoader
-}
-
-async function renderMap(isCurrentRequest: () => boolean) {
-  if (!zone.value || !mapElement.value) {
-    return
-  }
-
-  const currentZone = zone.value
-  const targetElement = mapElement.value
-  mapLoading.value = true
-  mapError.value = ''
-
-  try {
-    const leaflet = await loadLeaflet()
-
-    if (!isCurrentRequest() || zone.value?.id !== currentZone.id || mapElement.value !== targetElement) {
-      return
-    }
-
-    destroyMap()
-    map = leaflet.map(targetElement).setView([currentZone.latitude, currentZone.longitude], 15)
-
-    leaflet
-      .tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; OpenStreetMap contributors',
-      })
-      .addTo(map)
-    leaflet.marker([currentZone.latitude, currentZone.longitude]).addTo(map)
-
-    requestAnimationFrame(() => {
-      map?.invalidateSize()
-    })
-  } catch (err) {
-    if (isCurrentRequest() && !isAbortError(err)) {
-      mapError.value = 'Interactive map unavailable'
-    }
-  } finally {
-    if (isCurrentRequest()) {
-      mapLoading.value = false
-    }
-  }
-}
-
 async function loadZone(id: string) {
   const request = beginRequest()
   loading.value = true
   error.value = ''
-  mapError.value = ''
-  mapLoading.value = false
   zone.value = null
-  destroyMap()
+  resetMapState()
 
   try {
     const data = await fetchZone(id, request.controller.signal)
@@ -166,7 +103,7 @@ async function loadZone(id: string) {
       return
     }
 
-    await renderMap(request.isCurrent)
+    await renderMap(data, request.isCurrent)
   } catch (err) {
     if (!request.isCurrent() || isAbortError(err)) {
       return
@@ -181,10 +118,6 @@ async function loadZone(id: string) {
 }
 
 watch(() => props.id, loadZone, { immediate: true })
-
-onUnmounted(() => {
-  destroyMap()
-})
 </script>
 
 <template>

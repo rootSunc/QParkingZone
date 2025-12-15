@@ -59,6 +59,34 @@ async function flushPromises() {
   await Promise.resolve()
 }
 
+function createZoneDetail(overrides: Partial<ZoneDetail> = {}): ZoneDetail {
+  return {
+    id: 1,
+    name: 'Kamppi Center',
+    city: 'helsinki',
+    type: 'commercial',
+    status: 'active',
+    description: 'Underground parking facility',
+    maxCapacity: 450,
+    hourlyRateEur: 4.5,
+    latitude: 60.1685,
+    longitude: 24.9318,
+    amenities: ['EV Charging'],
+    openingHours: {
+      weekdays: '06:00-23:00',
+      weekends: '08:00-23:00',
+    },
+    isOpen: true,
+    availability: {
+      state: 'open',
+      badge: 'Open now',
+      detail: 'Closes at 23:00',
+      schedule: '06:00-23:00',
+    },
+    ...overrides,
+  }
+}
+
 async function mountView(initialQuery: Record<string, string> = { city: 'helsinki' }) {
   const router = createRouter({
     history: createMemoryHistory(),
@@ -124,23 +152,7 @@ describe('ZoneDetailView', () => {
 
     expect(wrapper.text()).toContain('Loading zone details…')
 
-    pending.resolve({
-      id: 1,
-      name: 'Kamppi Center',
-      city: 'helsinki',
-      type: 'commercial',
-      status: 'active',
-      description: 'Underground parking facility',
-      maxCapacity: 450,
-      hourlyRateEur: 4.5,
-      latitude: 60.1685,
-      longitude: 24.9318,
-      amenities: ['EV Charging'],
-      openingHours: {
-        weekdays: '06:00-23:00',
-        weekends: '08:00-23:00',
-      },
-    })
+    pending.resolve(createZoneDetail())
     await flushPromises()
     await flushPromises()
 
@@ -163,23 +175,17 @@ describe('ZoneDetailView', () => {
   })
 
   it('syncs the route city query to the loaded zone city', async () => {
-    fetchZoneMock.mockResolvedValueOnce({
-      id: 1,
-      name: 'Tapiola AINOA Parking',
-      city: 'espoo',
-      type: 'commercial',
-      status: 'active',
-      description: 'Retail garage',
-      maxCapacity: 690,
-      hourlyRateEur: 3.6,
-      latitude: 60.1782,
-      longitude: 24.8047,
-      amenities: ['EV Charging'],
-      openingHours: {
-        weekdays: '06:00-23:30',
-        weekends: '08:00-23:30',
-      },
-    })
+    fetchZoneMock.mockResolvedValueOnce(
+      createZoneDetail({
+        name: 'Tapiola AINOA Parking',
+        city: 'espoo',
+        description: 'Retail garage',
+        maxCapacity: 690,
+        hourlyRateEur: 3.6,
+        latitude: 60.1782,
+        longitude: 24.8047,
+      }),
+    )
 
     const { wrapper } = await mountView({ city: 'helsinki', q: 'aino' })
 
@@ -191,23 +197,7 @@ describe('ZoneDetailView', () => {
   })
 
   it('renders a fallback when amenities are unavailable', async () => {
-    fetchZoneMock.mockResolvedValueOnce({
-      id: 1,
-      name: 'Kamppi Center',
-      city: 'helsinki',
-      type: 'commercial',
-      status: 'active',
-      description: 'Underground parking facility',
-      maxCapacity: 450,
-      hourlyRateEur: 4.5,
-      latitude: 60.1685,
-      longitude: 24.9318,
-      amenities: [],
-      openingHours: {
-        weekdays: '06:00-23:00',
-        weekends: '08:00-23:00',
-      },
-    })
+    fetchZoneMock.mockResolvedValueOnce(createZoneDetail({ amenities: [] }))
 
     const { wrapper } = await mountView()
 
@@ -220,23 +210,7 @@ describe('ZoneDetailView', () => {
   })
 
   it('can unmount cleanly after details load', async () => {
-    fetchZoneMock.mockResolvedValueOnce({
-      id: 1,
-      name: 'Kamppi Center',
-      city: 'helsinki',
-      type: 'commercial',
-      status: 'active',
-      description: 'Underground parking facility',
-      maxCapacity: 450,
-      hourlyRateEur: 4.5,
-      latitude: 60.1685,
-      longitude: 24.9318,
-      amenities: ['EV Charging'],
-      openingHours: {
-        weekdays: '06:00-23:00',
-        weekends: '08:00-23:00',
-      },
-    })
+    fetchZoneMock.mockResolvedValueOnce(createZoneDetail())
 
     const { wrapper } = await mountView()
 

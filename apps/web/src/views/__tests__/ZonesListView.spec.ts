@@ -74,9 +74,12 @@ function createZoneSummary(overrides: Partial<ZonesPage['items'][number]> = {}):
     latitude: 60.1685,
     longitude: 24.9318,
     amenities: ['EV Charging', 'Indoor Parking'],
-    openingHours: {
-      weekdays: '06:00-23:30',
-      weekends: '08:00-23:30',
+    isOpen: true,
+    availability: {
+      state: 'open',
+      badge: 'Open now',
+      detail: 'Closes at 23:30',
+      schedule: '06:00-23:30',
     },
     ...overrides,
   }
@@ -193,11 +196,7 @@ describe('ZonesListView', () => {
             type: 'street',
             hourlyRateEur: 3.5,
             latitude: 60.167,
-            longitude: 24.9475,
-            openingHours: {
-              weekdays: '08:00-21:00',
-              weekends: '10:00-18:00',
-            },
+            longitude: 24.9475
           }),
         ]),
       )
@@ -209,11 +208,7 @@ describe('ZonesListView', () => {
             type: 'street',
             hourlyRateEur: 3.5,
             latitude: 60.167,
-            longitude: 24.9475,
-            openingHours: {
-              weekdays: '08:00-21:00',
-              weekends: '10:00-18:00',
-            },
+            longitude: 24.9475
           }),
         ]),
       )
@@ -389,11 +384,7 @@ describe('ZonesListView', () => {
               type: 'street',
               hourlyRateEur: 3.5,
               latitude: 60.167,
-              longitude: 24.9475,
-              openingHours: {
-                weekdays: '08:00-21:00',
-                weekends: '10:00-18:00',
-              },
+              longitude: 24.9475
             }),
             createZoneSummary({
               id: 3,
@@ -408,11 +399,7 @@ describe('ZonesListView', () => {
               type: 'street',
               hourlyRateEur: 3.4,
               latitude: 60.1788,
-              longitude: 24.9506,
-              openingHours: {
-                weekdays: '07:00-21:00',
-                weekends: '08:00-18:00',
-              },
+              longitude: 24.9506
             }),
           ],
           { total: 13, page: 1, limit: 12 },
@@ -427,11 +414,7 @@ describe('ZonesListView', () => {
               status: 'inactive',
               hourlyRateEur: 2.4,
               latitude: 60.1942,
-              longitude: 25.0285,
-              openingHours: {
-                weekdays: 'Closed',
-                weekends: 'Closed',
-              },
+              longitude: 25.0285
             }),
           ],
           { total: 13, page: 2, limit: 12 },
