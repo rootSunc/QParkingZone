@@ -7,7 +7,7 @@ services:
     environment:
       APP_ENV: production
       APP_DEBUG: "false"
-      PARKING_ZONES_AUTO_SEED: "true"
+      PARKING_ZONES_AUTO_SEED: "false"
       PARKING_ZONES_DB_PATH: /app/var/zones.sqlite
     expose:
       - "80"
