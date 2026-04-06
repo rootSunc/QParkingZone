@@ -46,6 +46,8 @@ final class Database
             self::migrateZonesTable($pdo, self::readSqlFile($schemaPath));
         }
 
+        self::ensureZonesIndexes($pdo);
+
         if ($autoSeed && self::zonesTableIsEmpty($pdo)) {
             $pdo->exec(self::readSqlFile($seedPath));
         }
@@ -163,6 +165,18 @@ final class Database
         }
 
         return false;
+    }
+
+    private static function ensureZonesIndexes(PDO $pdo): void
+    {
+        foreach ([
+            'CREATE INDEX IF NOT EXISTS idx_zones_city ON zones (city)',
+            'CREATE INDEX IF NOT EXISTS idx_zones_type ON zones (type)',
+            'CREATE INDEX IF NOT EXISTS idx_zones_status ON zones (status)',
+            'CREATE INDEX IF NOT EXISTS idx_zones_name ON zones (name)',
+        ] as $sql) {
+            $pdo->exec($sql);
+        }
     }
 
     private static function readSqlFile(string $path): string

@@ -1,26 +1,20 @@
-import { computed, ref } from 'vue'
-import { cityOptions, defaultCitySlug, getCityLabel, type CitySlug } from '@/config/cities'
+import { computed } from 'vue'
+import type { LocationQuery } from 'vue-router'
+import { cityOptions, getCityLabel } from '@/config/cities'
+import { parseZoneCatalogQuery } from '@/composables/useZoneCatalogRoute'
 
-const selectedCity = ref<CitySlug>(defaultCitySlug)
+export function useCitySelection(querySource: () => LocationQuery) {
+  const selectedCity = computed(() => {
+    return parseZoneCatalogQuery(querySource()).city
+  })
 
-export function useCitySelection() {
   const selectedCityLabel = computed(() => {
     return getCityLabel(selectedCity.value)
   })
-
-  function setSelectedCity(nextCity: CitySlug) {
-    selectedCity.value = nextCity
-  }
-
-  function resetSelectedCity() {
-    selectedCity.value = defaultCitySlug
-  }
 
   return {
     cityOptions,
     selectedCity,
     selectedCityLabel,
-    setSelectedCity,
-    resetSelectedCity,
   }
 }

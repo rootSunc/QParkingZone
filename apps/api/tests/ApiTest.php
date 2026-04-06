@@ -37,11 +37,15 @@ final class ApiTest extends TestCase
 
         $this->assertSame(200, $response->getStatusCode());
         $this->assertSame('application/json', $response->getHeaderLine('Content-Type'));
-        $this->assertIsArray($data);
-        $this->assertNotEmpty($data);
+        $this->assertSame(['items', 'total', 'page', 'limit'], array_keys($data));
+        $this->assertIsArray($data['items']);
+        $this->assertNotEmpty($data['items']);
+        $this->assertGreaterThan(0, $data['total']);
+        $this->assertSame(1, $data['page']);
+        $this->assertSame(20, $data['limit']);
         $this->assertSame(
             ['id', 'name', 'city', 'type', 'status', 'hourlyRateEur', 'latitude', 'longitude'],
-            array_keys($data[0])
+            array_keys($data['items'][0])
         );
     }
 
@@ -51,11 +55,26 @@ final class ApiTest extends TestCase
         $data = $this->decodeJson($response);
 
         $this->assertSame(200, $response->getStatusCode());
-        $this->assertNotEmpty($data);
+        $this->assertNotEmpty($data['items']);
+        $this->assertSame(4, $data['total']);
 
-        foreach ($data as $zone) {
+        foreach ($data['items'] as $zone) {
             $this->assertSame('espoo', $zone['city']);
         }
+    }
+
+    public function testGetZonesSupportsSearchSortStatusAndPagination(): void
+    {
+        $response = $this->request('GET', '/api/zones?city=vantaa&q=park&status=active&sort=price_desc&page=1&limit=1');
+        $data = $this->decodeJson($response);
+
+        $this->assertSame(200, $response->getStatusCode());
+        $this->assertSame(2, $data['total']);
+        $this->assertSame(1, $data['page']);
+        $this->assertSame(1, $data['limit']);
+        $this->assertCount(1, $data['items']);
+        $this->assertSame('Jumbo Retail Park Hall', $data['items'][0]['name']);
+        $this->assertSame('vantaa', $data['items'][0]['city']);
     }
 
     public function testGetZoneByIdReturnsContractedDetailPayload(): void

@@ -1,8 +1,8 @@
-import { enableAutoUnmount, RouterLinkStub, mount } from '@vue/test-utils'
+import { enableAutoUnmount, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { createMemoryHistory, createRouter } from 'vue-router'
 import ZoneDetailView from '@/views/ZoneDetailView.vue'
 import { fetchZone } from '@/api/zones'
-import { useCitySelection } from '@/composables/useCitySelection'
 
 const mapRemove = vi.fn()
 const mapInvalidateSize = vi.fn()
@@ -35,7 +35,6 @@ vi.mock('leaflet', () => ({
 }))
 
 const fetchZoneMock = vi.mocked(fetchZone)
-const { resetSelectedCity } = useCitySelection()
 
 enableAutoUnmount(afterEach)
 
@@ -54,9 +53,46 @@ async function flushPromises() {
   await new Promise((resolve) => setTimeout(resolve, 0))
 }
 
+async function mountView(initialQuery: Record<string, string> = { city: 'helsinki' }) {
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [
+      {
+        path: '/zones/:id',
+        name: 'zone-detail',
+        component: ZoneDetailView,
+        props: true,
+      },
+      {
+        path: '/',
+        name: 'zones',
+        component: {
+          template: '<div />',
+        },
+      },
+    ],
+  })
+
+  await router.push({
+    name: 'zone-detail',
+    params: { id: '1' },
+    query: initialQuery,
+  })
+  await router.isReady()
+
+  return {
+    router,
+    wrapper: mount(ZoneDetailView, {
+      props: { id: '1' },
+      global: {
+        plugins: [router],
+      },
+    }),
+  }
+}
+
 describe('ZoneDetailView', () => {
   beforeEach(() => {
-    resetSelectedCity()
     mapInstance = {
       setView: mapSetView,
       remove: mapRemove,
@@ -91,14 +127,7 @@ describe('ZoneDetailView', () => {
     }>()
     fetchZoneMock.mockReturnValueOnce(pending.promise)
 
-    const wrapper = mount(ZoneDetailView, {
-      props: { id: '1' },
-      global: {
-        stubs: {
-          RouterLink: RouterLinkStub,
-        },
-      },
-    })
+    const { wrapper } = await mountView()
 
     expect(wrapper.text()).toContain('Loading zone details…')
 
@@ -122,6 +151,7 @@ describe('ZoneDetailView', () => {
     await flushPromises()
     await flushPromises()
 
+    expect(fetchZoneMock).toHaveBeenCalledWith('1')
     expect(wrapper.text()).toContain('Kamppi Center')
     expect(wrapper.text()).toContain('Underground parking facility')
     expect(wrapper.text()).toContain('EV Charging')
@@ -131,18 +161,40 @@ describe('ZoneDetailView', () => {
   it('shows the request error when loading fails', async () => {
     fetchZoneMock.mockRejectedValueOnce(new Error('Zone not found'))
 
-    const wrapper = mount(ZoneDetailView, {
-      props: { id: '999' },
-      global: {
-        stubs: {
-          RouterLink: RouterLinkStub,
-        },
-      },
-    })
+    const { wrapper } = await mountView()
 
     await flushPromises()
 
     expect(wrapper.text()).toContain('Zone not found')
+  })
+
+  it('syncs the route city query to the loaded zone city', async () => {
+    fetchZoneMock.mockResolvedValueOnce({
+      id: 1,
+      name: 'Tapiola AINOA Parking',
+      city: 'espoo',
+      type: 'commercial',
+      status: 'active',
+      description: 'Retail garage',
+      maxCapacity: 690,
+      hourlyRateEur: 3.6,
+      latitude: 60.1782,
+      longitude: 24.8047,
+      amenities: ['EV Charging'],
+      openingHours: {
+        weekdays: '06:00-23:30',
+        weekends: '08:00-23:30',
+      },
+    })
+
+    const { router, wrapper } = await mountView({ city: 'helsinki', q: 'aino' })
+
+    await flushPromises()
+    await flushPromises()
+
+    expect(wrapper.get('a.back-link').attributes('href')).toContain('city=espoo')
+    expect(router.currentRoute.value.query.city).toBe('espoo')
+    expect(router.currentRoute.value.query.q).toBe('aino')
   })
 
   it('removes the leaflet map when unmounted', async () => {
@@ -164,14 +216,7 @@ describe('ZoneDetailView', () => {
       },
     })
 
-    const wrapper = mount(ZoneDetailView, {
-      props: { id: '1' },
-      global: {
-        stubs: {
-          RouterLink: RouterLinkStub,
-        },
-      },
-    })
+    const { wrapper } = await mountView()
 
     await flushPromises()
     await flushPromises()
