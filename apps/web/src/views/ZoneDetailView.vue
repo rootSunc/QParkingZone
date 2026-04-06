@@ -62,6 +62,18 @@ const availabilityClass = computed(() => {
   return availability.value?.state ?? 'closed'
 })
 
+const hasAmenities = computed(() => {
+  return (zone.value?.amenities.length ?? 0) > 0
+})
+
+const displayedAmenities = computed(() => {
+  if (!zone.value) {
+    return []
+  }
+
+  return hasAmenities.value ? zone.value.amenities : ['Amenity details pending']
+})
+
 function destroyMap() {
   if (map) {
     map.remove()
@@ -258,11 +270,20 @@ onUnmounted(() => {
           <p class="panel-kicker">Included</p>
           <h2>Amenities</h2>
 
-          <div class="amenities">
-            <span v-for="amenity in zone.amenities" :key="amenity" class="amenity-tag">
+          <div class="amenities" :class="{ 'amenities-empty': !hasAmenities }">
+            <span
+              v-for="amenity in displayedAmenities"
+              :key="amenity"
+              class="amenity-tag"
+              :class="{ 'amenity-tag-muted': !hasAmenities }"
+            >
               {{ amenity }}
             </span>
           </div>
+
+          <p v-if="!hasAmenities" class="amenities-note">
+            We&apos;re still confirming the included amenities for this zone.
+          </p>
         </div>
       </section>
 
@@ -620,6 +641,10 @@ onUnmounted(() => {
   gap: 10px;
 }
 
+.amenities-empty {
+  margin-top: 4px;
+}
+
 .amenity-tag {
   padding: 8px 12px;
   border-radius: 999px;
@@ -627,6 +652,19 @@ onUnmounted(() => {
   color: #315b1f;
   font-size: 13px;
   font-weight: 800;
+}
+
+.amenity-tag-muted {
+  background: rgba(18, 18, 18, 0.08);
+  color: #5b564d;
+}
+
+.amenities-note {
+  margin: 12px 0 0;
+  max-width: 34ch;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1.5;
 }
 
 .location-panel {

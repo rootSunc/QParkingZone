@@ -360,7 +360,7 @@ describe('ZonesListView', () => {
               },
             }),
           ],
-          { total: 5, page: 1, limit: 12 },
+          { total: 13, page: 1, limit: 12 },
         ),
       )
       .mockResolvedValueOnce(
@@ -379,7 +379,7 @@ describe('ZonesListView', () => {
               },
             }),
           ],
-          { total: 5, page: 2, limit: 12 },
+          { total: 13, page: 2, limit: 12 },
         ),
       )
 
