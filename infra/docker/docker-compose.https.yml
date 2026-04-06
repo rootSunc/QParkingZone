@@ -34,15 +34,17 @@ services:
     container_name: parking-zones-caddy
     depends_on:
       - frontend
+    command: ["/bin/sh", "/usr/local/bin/start-caddy.sh"]
     environment:
       DOMAIN: ${DOMAIN}
-      WWW_DOMAIN: ${WWW_DOMAIN}
+      WWW_DOMAIN: ${WWW_DOMAIN:-}
     ports:
       - "80:80"
       - "443:443"
     restart: unless-stopped
     volumes:
-      - ../caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ../caddy/Caddyfile.tmpl:/etc/caddy/Caddyfile.tmpl:ro
+      - ../caddy/start-caddy.sh:/usr/local/bin/start-caddy.sh:ro
       - caddy-data:/data
       - caddy-config:/config
 
