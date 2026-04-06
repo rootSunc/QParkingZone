@@ -114,6 +114,9 @@ describe('ZonesListView', () => {
         city: 'helsinki',
         q: '',
         type: null,
+        openNow: false,
+        lat: null,
+        lng: null,
         sort: 'name',
         page: 1,
         limit: 4,
@@ -204,7 +207,38 @@ describe('ZonesListView', () => {
       }),
       expect.any(AbortSignal),
     )
-    expect(wrapper.text()).toContain('Filtered by type')
+    expect(wrapper.text()).toContain('Active filters')
+    expect(wrapper.text()).toContain('commercial ×')
+  })
+
+  it('toggles the open-now filter through the route query', async () => {
+    fetchZonesMock
+      .mockResolvedValueOnce(
+        createZonesPage([
+          createZoneSummary(),
+        ]),
+      )
+      .mockResolvedValueOnce(
+        createZonesPage([
+          createZoneSummary(),
+        ]),
+      )
+
+    const { router, wrapper } = await mountView()
+
+    await flushPromises()
+    await wrapper.get('button.catalog-chip').trigger('click')
+    await flushPromises()
+    await flushPromises()
+
+    expect(router.currentRoute.value.query.open_now).toBe('1')
+    expect(fetchZonesMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        openNow: true,
+        page: 1,
+      }),
+      expect.any(AbortSignal),
+    )
   })
 
   it('reloads zones when the city query changes', async () => {
@@ -365,5 +399,60 @@ describe('ZonesListView', () => {
       expect.any(AbortSignal),
     )
     expect(wrapper.text()).toContain('Herttoniemi Center Parking')
+  })
+
+  it('stores user coordinates in the route and enables distance sorting', async () => {
+    const geolocation = {
+      getCurrentPosition: vi.fn((success: PositionCallback) => {
+        success({
+          coords: {
+            latitude: 60.17,
+            longitude: 24.94,
+            accuracy: 1,
+            altitude: null,
+            altitudeAccuracy: null,
+            heading: null,
+            speed: null,
+          },
+          timestamp: Date.now(),
+        } as GeolocationPosition)
+      }),
+    }
+
+    Object.defineProperty(window.navigator, 'geolocation', {
+      configurable: true,
+      value: geolocation,
+    })
+
+    fetchZonesMock
+      .mockResolvedValueOnce(createZonesPage([createZoneSummary()]))
+      .mockResolvedValueOnce(
+        createZonesPage([
+          createZoneSummary({
+            distanceKm: 1.25,
+          }),
+        ]),
+      )
+
+    const { router, wrapper } = await mountView()
+
+    await flushPromises()
+    await wrapper.get('button.catalog-chip-ghost').trigger('click')
+    await flushPromises()
+    await flushPromises()
+
+    expect(geolocation.getCurrentPosition).toHaveBeenCalled()
+    expect(router.currentRoute.value.query.lat).toBe('60.17000')
+    expect(router.currentRoute.value.query.lng).toBe('24.94000')
+    expect(router.currentRoute.value.query.sort).toBe('distance_asc')
+    expect(fetchZonesMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        lat: 60.17,
+        lng: 24.94,
+        sort: 'distance_asc',
+      }),
+      expect.any(AbortSignal),
+    )
+    expect(wrapper.text()).toContain('1.3 km away')
   })
 })

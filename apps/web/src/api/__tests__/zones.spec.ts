@@ -22,6 +22,7 @@ describe('zones api', () => {
             weekdays: '06:00-23:30',
             weekends: '08:00-23:30',
           },
+          distanceKm: 1.24,
         },
       ],
       total: 1,
@@ -38,13 +39,16 @@ describe('zones api', () => {
       city: 'helsinki',
       q: 'kamppi',
       type: 'commercial',
+      openNow: true,
+      lat: 60.17,
+      lng: 24.94,
       sort: 'price_desc',
       page: 2,
       limit: 4,
     })
 
     expect(fetch).toHaveBeenCalledWith(
-      '/api/zones?city=helsinki&q=kamppi&type=commercial&sort=price_desc&page=2&limit=4',
+      '/api/zones?city=helsinki&q=kamppi&type=commercial&open_now=true&lat=60.17&lng=24.94&sort=price_desc&page=2&limit=4',
       { signal: undefined },
     )
     expect(result).toEqual(mockZones)
