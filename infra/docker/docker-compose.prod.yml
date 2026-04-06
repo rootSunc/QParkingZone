@@ -1,0 +1,33 @@
+version: "3.9"
+
+services:
+  backend:
+    build:
+      context: ../../apps/api
+      dockerfile: ../../infra/docker/backend.Dockerfile
+    container_name: parking-zones-backend
+    command: sh -lc "php scripts/init-db.php && php -S 0.0.0.0:8000 -t public"
+    environment:
+      APP_ENV: production
+      APP_DEBUG: "false"
+      PARKING_ZONES_AUTO_SEED: "true"
+      PARKING_ZONES_DB_PATH: /app/var/zones.sqlite
+    expose:
+      - "8000"
+    restart: unless-stopped
+    volumes:
+      - parking-zones-data:/app/var
+
+  frontend:
+    build:
+      context: ../../apps/web
+      dockerfile: ../../infra/docker/frontend.Dockerfile
+    container_name: parking-zones-frontend
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+    restart: unless-stopped
+
+volumes:
+  parking-zones-data:
