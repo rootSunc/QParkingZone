@@ -40,10 +40,14 @@ final class Database
         string $seedPath,
         bool $autoSeed = true
     ): void {
+        $schemaSql = self::readSqlFile($schemaPath);
+
         if (!self::zonesTableExists($pdo)) {
-            $pdo->exec(self::readSqlFile($schemaPath));
+            $pdo->exec($schemaSql);
         } elseif (!self::zonesTableHasExpectedSchema($pdo)) {
-            self::migrateZonesTable($pdo, self::readSqlFile($schemaPath));
+            self::migrateZonesTable($pdo, $schemaSql);
+        } else {
+            $pdo->exec($schemaSql);
         }
 
         self::ensureZonesIndexes($pdo);
@@ -174,6 +178,8 @@ final class Database
             'CREATE INDEX IF NOT EXISTS idx_zones_type ON zones (type)',
             'CREATE INDEX IF NOT EXISTS idx_zones_status ON zones (status)',
             'CREATE INDEX IF NOT EXISTS idx_zones_name ON zones (name)',
+            'CREATE INDEX IF NOT EXISTS idx_zone_availability_sources_zone_priority ON zone_availability_sources (zone_id, priority)',
+            'CREATE INDEX IF NOT EXISTS idx_zone_availability_sources_provider_external ON zone_availability_sources (provider, external_id)',
         ] as $sql) {
             $pdo->exec($sql);
         }

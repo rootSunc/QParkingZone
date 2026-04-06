@@ -47,7 +47,7 @@ final class ApiTest extends TestCase
         $this->assertSame(1, $data['page']);
         $this->assertSame(20, $data['limit']);
         $this->assertSame(
-            ['id', 'name', 'city', 'type', 'status', 'hourlyRateEur', 'latitude', 'longitude', 'openingHours'],
+            ['id', 'name', 'city', 'type', 'status', 'hourlyRateEur', 'latitude', 'longitude', 'amenities', 'openingHours'],
             array_keys($data['items'][0])
         );
         $this->assertSame(['weekdays', 'weekends'], array_keys($data['items'][0]['openingHours']));

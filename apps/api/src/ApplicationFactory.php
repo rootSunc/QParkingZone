@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace ParkingZones;
 
+// Missing Availability imports removed
 use ParkingZones\Config\AppConfig;
 use ParkingZones\Http\JsonErrorHandler;
 use ParkingZones\Http\JsonResponder;
@@ -26,6 +27,7 @@ final class ApplicationFactory
     ): App
     {
         $config ??= AppConfig::fromEnvironment();
+        $connection = $pdo ?? Database::sqliteFile($config->databasePath, $config->autoSeed);
 
         $app = SlimAppFactory::create();
         $responder = new JsonResponder();
@@ -34,8 +36,10 @@ final class ApplicationFactory
             new JsonErrorHandler($app->getResponseFactory(), $responder)
         );
 
+        // Availability block removed
+
         $repository = new ZoneRepository(
-            $pdo ?? Database::sqliteFile($config->databasePath, $config->autoSeed),
+            $connection,
             $currentTime
         );
 
@@ -53,6 +57,8 @@ final class ApplicationFactory
                     self::readBoolean($queryParams['open_now'] ?? null, false),
                     self::readCoordinate($queryParams['lat'] ?? null, -90.0, 90.0),
                     self::readCoordinate($queryParams['lng'] ?? null, -180.0, 180.0),
+                    self::readFloat($queryParams['radius'] ?? null, 0.1, 500.0),
+                    self::readArrayString($queryParams['amenities'] ?? null),
                     self::readPositiveInteger($queryParams['page'] ?? null, 1),
                     self::readPositiveInteger($queryParams['limit'] ?? null, 20, self::MAX_PAGE_SIZE)
                 )
@@ -136,5 +142,34 @@ final class ApplicationFactory
         }
 
         return $normalized;
+    }
+
+    private static function readFloat(mixed $value, float $minimum, float $maximum): ?float
+    {
+        if (!is_string($value) && !is_float($value) && !is_int($value)) {
+            return null;
+        }
+
+        $parsed = filter_var($value, FILTER_VALIDATE_FLOAT, FILTER_NULL_ON_FAILURE);
+
+        if ($parsed === null || $parsed < $minimum || $parsed > $maximum) {
+            return null;
+        }
+
+        return (float) $parsed;
+    }
+
+    private static function readArrayString(mixed $value): ?array
+    {
+        if (!is_string($value)) {
+            return null;
+        }
+
+        $parts = array_filter(array_map('trim', explode(',', $value)), fn(string $s) => $s !== '');
+        if (count($parts) === 0) {
+            return null;
+        }
+
+        return $parts;
     }
 }
