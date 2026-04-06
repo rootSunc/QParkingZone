@@ -10,6 +10,7 @@ export interface ZoneSummary {
   hourlyRateEur: number
   latitude: number
   longitude: number
+  openingHours: OpeningHours
 }
 
 export interface OpeningHours {
@@ -21,7 +22,6 @@ export interface ZoneDetail extends ZoneSummary {
   description: string
   maxCapacity: number
   amenities: string[]
-  openingHours: OpeningHours
 }
 
 export interface ZonesPage {

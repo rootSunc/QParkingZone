@@ -1,15 +1,13 @@
 import {createRouter, createWebHashHistory} from 'vue-router'
-import ZonesListView from '@/views/ZonesListView.vue'
-import ZoneDetailView from '@/views/ZoneDetailView.vue'
 
 export default createRouter({
   history: createWebHashHistory(),
   routes: [
-    {path: '/', name: 'zones', component: ZonesListView},
+    {path: '/', name: 'zones', component: () => import('@/views/ZonesListView.vue')},
     {
       path: '/zones/:id',
       name: 'zone-detail',
-      component: ZoneDetailView,
+      component: () => import('@/views/ZoneDetailView.vue'),
       props: true,
     },
   ],
