@@ -47,7 +47,7 @@ Based on the current repository implementation and configuration, there are two 
 
 - Frontend: `Vue 3`, `TypeScript`, `Vite`, `Vue Router`, `Leaflet`
 - Backend: `PHP 8.3`, `Slim 4`, `PDO`, `SQLite`
-- Testing: `Vitest`, `Vue Test Utils`, `PHPUnit`
+- Testing: `Vitest`, `Vue Test Utils`, `Playwright`, `PHPUnit`
 - Deployment: `Docker`, `Docker Compose`, `Nginx`
 - HTTPS: `Caddy`
 
@@ -335,6 +335,16 @@ Additional checks:
 cd apps/web
 npm run lint
 npm run build
+npm run test:e2e
+```
+
+You can also run common checks from the repository root:
+
+```bash
+make test
+make test-e2e
+make audit
+make build
 ```
 
 ## 9. Possible Future Improvements

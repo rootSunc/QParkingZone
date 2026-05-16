@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { computed, onUnmounted, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { fetchZones, type ZonesPage } from '@/api/zones'
+import { isAbortError, useAbortableRequest } from '@/composables/useAbortableRequest'
+import { useBrowserGeolocation } from '@/composables/useBrowserGeolocation'
 import { useCitySelection } from '@/composables/useCitySelection'
 import {
   defaultZonePageSize,
@@ -22,12 +24,10 @@ const pageData = ref<ZonesPage>({
 })
 const loading = ref(false)
 const error = ref('')
-const locationError = ref('')
-const locating = ref(false)
 const { selectedCityLabel } = useCitySelection(() => route.query)
 const catalogState = computed(() => parseZoneCatalogQuery(route.query))
-let activeRequestId = 0
-let activeController: AbortController | null = null
+const { beginRequest } = useAbortableRequest()
+const { locating, locationError, clearLocationError, locateUser: requestUserLocation } = useBrowserGeolocation()
 
 const zones = computed(() => {
   return pageData.value.items
@@ -203,7 +203,7 @@ function clearLocation() {
 }
 
 function applyUserLocation(latitude: number, longitude: number) {
-  locationError.value = ''
+  clearLocationError()
   replaceCatalogQuery({
     lat: latitude,
     lng: longitude,
@@ -213,29 +213,7 @@ function applyUserLocation(latitude: number, longitude: number) {
 }
 
 function locateUser() {
-  if (typeof navigator === 'undefined' || !('geolocation' in navigator)) {
-    locationError.value = 'Geolocation is unavailable in this browser.'
-    return
-  }
-
-  locating.value = true
-  locationError.value = ''
-
-  navigator.geolocation.getCurrentPosition(
-    (position) => {
-      locating.value = false
-      applyUserLocation(position.coords.latitude, position.coords.longitude)
-    },
-    () => {
-      locating.value = false
-      locationError.value = 'Location access was denied.'
-    },
-    {
-      enableHighAccuracy: true,
-      timeout: 8000,
-      maximumAge: 300000,
-    },
-  )
+  requestUserLocation(({ latitude, longitude }) => applyUserLocation(latitude, longitude))
 }
 
 function goToPage(nextPage: number) {
@@ -251,22 +229,15 @@ function goToPage(nextPage: number) {
   scrollToZones()
 }
 
-function isAbortError(error: unknown): boolean {
-  return error instanceof Error && error.name === 'AbortError'
-}
-
 async function loadZones(state: ZoneCatalogQueryState) {
-  const requestId = ++activeRequestId
-  activeController?.abort()
-  const controller = new AbortController()
-  activeController = controller
+  const request = beginRequest()
   loading.value = true
   error.value = ''
 
   try {
-    const data = await fetchZones(state, controller.signal)
+    const data = await fetchZones(state, request.controller.signal)
 
-    if (requestId !== activeRequestId) {
+    if (!request.isCurrent()) {
       return
     }
 
@@ -284,29 +255,20 @@ async function loadZones(state: ZoneCatalogQueryState) {
 
     pageData.value = data
   } catch (err) {
-    if (requestId !== activeRequestId || isAbortError(err)) {
+    if (!request.isCurrent() || isAbortError(err)) {
       return
     }
 
     error.value = err instanceof Error ? err.message : 'Failed to load zones'
   } finally {
-    if (requestId === activeRequestId) {
+    if (request.isCurrent()) {
       loading.value = false
-
-      if (activeController === controller) {
-        activeController = null
-      }
+      request.finish()
     }
   }
 }
 
 watch(catalogState, loadZones, { immediate: true })
-
-onUnmounted(() => {
-  activeRequestId += 1
-  activeController?.abort()
-  activeController = null
-})
 </script>
 
 <template>

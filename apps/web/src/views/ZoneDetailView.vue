@@ -4,6 +4,7 @@ import { RouterLink, useRoute, useRouter } from 'vue-router'
 import type * as Leaflet from 'leaflet'
 import type { Map as LeafletMap } from 'leaflet'
 import { fetchZone, type ZoneDetail } from '../api/zones'
+import { isAbortError, useAbortableRequest } from '@/composables/useAbortableRequest'
 import { useCurrentMinute } from '@/composables/useCurrentMinute'
 import { getCityLabel } from '@/config/cities'
 import { useCitySelection } from '@/composables/useCitySelection'
@@ -22,9 +23,8 @@ const mapError = ref('')
 const mapElement = ref<HTMLElement | null>(null)
 const { selectedCity, selectedCityLabel } = useCitySelection(() => route.query)
 const now = useCurrentMinute()
+const { beginRequest } = useAbortableRequest()
 let map: LeafletMap | null = null
-let activeRequestId = 0
-let activeController: AbortController | null = null
 let leafletLoader: Promise<typeof Leaflet> | null = null
 
 const mapUrl = computed(() => {
@@ -83,10 +83,6 @@ function destroyMap() {
   }
 }
 
-function isAbortError(error: unknown): boolean {
-  return error instanceof Error && error.name === 'AbortError'
-}
-
 function loadLeaflet() {
   leafletLoader ??= import('leaflet').then((module) => {
     const moduleWithDefault = module as typeof module & { default?: typeof Leaflet }
@@ -97,7 +93,7 @@ function loadLeaflet() {
   return leafletLoader
 }
 
-async function renderMap(requestId: number) {
+async function renderMap(isCurrentRequest: () => boolean) {
   if (!zone.value || !mapElement.value) {
     return
   }
@@ -110,7 +106,7 @@ async function renderMap(requestId: number) {
   try {
     const leaflet = await loadLeaflet()
 
-    if (requestId !== activeRequestId || zone.value?.id !== currentZone.id || mapElement.value !== targetElement) {
+    if (!isCurrentRequest() || zone.value?.id !== currentZone.id || mapElement.value !== targetElement) {
       return
     }
 
@@ -128,21 +124,18 @@ async function renderMap(requestId: number) {
       map?.invalidateSize()
     })
   } catch (err) {
-    if (requestId === activeRequestId && !isAbortError(err)) {
+    if (isCurrentRequest() && !isAbortError(err)) {
       mapError.value = 'Interactive map unavailable'
     }
   } finally {
-    if (requestId === activeRequestId) {
+    if (isCurrentRequest()) {
       mapLoading.value = false
     }
   }
 }
 
 async function loadZone(id: string) {
-  const requestId = ++activeRequestId
-  activeController?.abort()
-  const controller = new AbortController()
-  activeController = controller
+  const request = beginRequest()
   loading.value = true
   error.value = ''
   mapError.value = ''
@@ -151,8 +144,8 @@ async function loadZone(id: string) {
   destroyMap()
 
   try {
-    const data = await fetchZone(id, controller.signal)
-    if (requestId !== activeRequestId) {
+    const data = await fetchZone(id, request.controller.signal)
+    if (!request.isCurrent()) {
       return
     }
 
@@ -169,13 +162,13 @@ async function loadZone(id: string) {
 
     await nextTick()
 
-    if (requestId !== activeRequestId) {
+    if (!request.isCurrent()) {
       return
     }
 
-    await renderMap(requestId)
+    await renderMap(request.isCurrent)
   } catch (err) {
-    if (requestId !== activeRequestId || isAbortError(err)) {
+    if (!request.isCurrent() || isAbortError(err)) {
       return
     }
 
@@ -183,18 +176,13 @@ async function loadZone(id: string) {
     loading.value = false
     mapLoading.value = false
   } finally {
-    if (requestId === activeRequestId && activeController === controller) {
-      activeController = null
-    }
+    request.finish()
   }
 }
 
 watch(() => props.id, loadZone, { immediate: true })
 
 onUnmounted(() => {
-  activeRequestId += 1
-  activeController?.abort()
-  activeController = null
   destroyMap()
 })
 </script>
