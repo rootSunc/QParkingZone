@@ -1,8 +1,17 @@
-# QParking Zones
+# <img src="docs/icons/qparking.svg" width="34" alt="QParking logo" align="left"> QParking Zones
+
+![Vue](https://img.shields.io/badge/Vue-3.5-42b883)
+![TypeScript](https://img.shields.io/badge/TypeScript-6-3178c6)
+![Slim](https://img.shields.io/badge/Slim-4-72dd42)
+![SQLite](https://img.shields.io/badge/SQLite-local-003b57)
+![Docker](https://img.shields.io/badge/Docker-ready-2496ed)
+![CI](https://img.shields.io/badge/CI-GitHub_Actions-24292f)
+
+QParking Zones is a full-stack parking-zone explorer for Helsinki, Espoo, and Vantaa. It combines a compact Vue search experience, a Slim API, deterministic OpenStreetMap imports, SQLite persistence, and Docker-based delivery checks.
 
 ## 1. Project Overview
 
-QParking Zones is a full-stack project for exploring parking data across the Helsinki metropolitan area. The goal of this project is to detect and expose parking area data for the Helsinki metropolitan region and provide a simple parking search experience for end users:
+The goal of this project is to detect and expose parking area data for the Helsinki metropolitan region and provide a simple parking search experience for end users:
 
 - Coverage across `Helsinki`, `Espoo`, and `Vantaa`
 - Nearby parking discovery based on the user's current location
@@ -11,7 +20,47 @@ QParking Zones is a full-stack project for exploring parking data across the Hel
 
 At the moment, the project focuses on parking facilities and parking zones, not real-time free-space availability. The codebase already contains configuration placeholders for live availability providers, but those integrations are not yet exposed through the public API routes.
 
-## 2. Core Features and Real Data Sources
+## 2. Product Preview
+
+### Catalog Experience
+
+The first screen is the working product, not a marketing page: city selection, summary metrics, search, sorting, filters, pagination, and shareable URL state.
+
+![QParking catalog screen](docs/images/qparking-catalog.png)
+
+### Zone Detail Experience
+
+The detail page focuses on decision support: hourly price, capacity, opening status, amenities, exact coordinates, and an embedded OpenStreetMap preview.
+
+![QParking zone detail screen](docs/images/qparking-detail.png)
+
+## 3. Architecture
+
+```mermaid
+flowchart LR
+  User["User browser"] --> Web["Vue 3 + Vite SPA"]
+  Web --> Router["Vue Router URL state"]
+  Web --> Api["Slim 4 JSON API"]
+  Api --> Query["Validated zone query parser"]
+  Query --> Repo["Zone repository"]
+  Repo --> DB[("SQLite zones database")]
+  Importer["OSM Overpass importer"] --> DB
+  DB --> Sources["Source metadata + deterministic upserts"]
+  Web --> Maps["Leaflet + OpenStreetMap tiles"]
+  CI["GitHub Actions"] --> Tests["PHPUnit + Vitest + Playwright"]
+  CI --> Docker["Docker image and Compose checks"]
+```
+
+### System Slices
+
+| Slice | Role | Implementation |
+| --- | --- | --- |
+| <img src="docs/icons/web.svg" width="24" alt=""> Web app | Search, filter, compare, and open parking details | `Vue 3`, `TypeScript`, `Vue Router`, `Leaflet` |
+| <img src="docs/icons/api.svg" width="24" alt=""> API | Validates query contracts and returns JSON responses | `Slim 4`, `PDO`, custom query parser |
+| <img src="docs/icons/data.svg" width="24" alt=""> Data | Stores seed data and deterministic OSM imports | `SQLite`, JSON constraints, source identity indexes |
+| <img src="docs/icons/delivery.svg" width="24" alt=""> Delivery | Keeps the project reproducible and deployable | `Docker`, `Nginx`, `Caddy`, `GitHub Actions` |
+
+## 4. Core Features and Real Data Sources
 
 ### Core Features
 
@@ -43,7 +92,7 @@ Based on the current repository implementation and configuration, there are two 
   - These are not yet connected to the public API routes, but they represent the next likely integration path
 
 
-## 3. Tech Stack
+## 5. Tech Stack
 
 - Frontend: `Vue 3`, `TypeScript`, `Vite`, `Vue Router`, `Leaflet`
 - Backend: `PHP 8.3`, `Slim 4`, `PDO`, `SQLite`
@@ -51,7 +100,7 @@ Based on the current repository implementation and configuration, there are two 
 - Deployment: `Docker`, `Docker Compose`, `Nginx`
 - HTTPS: `Caddy`
 
-## 4. Project Structure
+## 6. Project Structure
 
 ```text
 apps/
@@ -69,15 +118,19 @@ apps/
       composables/        Route and state logic
       views/              List and detail pages
       utils/              Utility helpers such as opening-hours logic
+    e2e/                  Playwright browser coverage
     public/               Static assets
     vite.config.ts        Vite config
     vitest.config.ts      Vitest config
+docs/
+  icons/                  README icons and logo assets
+  images/                 Product screenshots
 infra/
   caddy/                  HTTPS reverse-proxy config
   docker/                 Dockerfiles and Compose files
 ```
 
-## 5. Local Development and Production Deployment
+## 7. Local Development and Production Deployment
 
 ### Option 1: Run Locally Without Docker
 
@@ -179,7 +232,7 @@ docker compose \
   up -d --build
 ```
 
-## 6. API Reference
+## 8. API Reference
 
 ### `GET /api/zones`
 
@@ -274,7 +327,7 @@ Returns a lightweight health payload:
 }
 ```
 
-## 7. Environment Variables
+## 9. Environment Variables
 
 ### Backend
 
@@ -291,7 +344,7 @@ Returns a lightweight health payload:
 
 
 
-## 8. Test Coverage
+## 10. Test Coverage
 
 ### Backend Tests
 
@@ -353,7 +406,7 @@ make build
 CI runs backend tests/audit, frontend lint/unit/build/E2E/audit, Compose validation,
 and Docker image builds on pushes and pull requests.
 
-## 9. Possible Future Improvements
+## 11. Possible Future Improvements
 
 - Integrate real-time occupancy and operational-status APIs
 - Add more authoritative city open data or operator-maintained datasets
