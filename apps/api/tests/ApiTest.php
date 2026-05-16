@@ -94,6 +94,20 @@ final class ApiTest extends TestCase
         }
     }
 
+    public function testGetZonesCanFilterByAmenities(): void
+    {
+        $response = $this->request('GET', '/api/zones?city=espoo&amenities=EV%20Charging,Indoor%20Parking');
+        $data = $this->decodeJson($response);
+
+        $this->assertSame(200, $response->getStatusCode());
+        $this->assertSame(3, $data['total']);
+
+        foreach ($data['items'] as $zone) {
+            $this->assertContains('EV Charging', $zone['amenities']);
+            $this->assertContains('Indoor Parking', $zone['amenities']);
+        }
+    }
+
     public function testGetZonesCanSortByDistanceWhenCoordinatesAreProvided(): void
     {
         $response = $this->request('GET', '/api/zones?city=helsinki&sort=distance_asc&lat=60.1670&lng=24.9475');
@@ -103,6 +117,42 @@ final class ApiTest extends TestCase
         $this->assertSame('Esplanadi Park', $data['items'][0]['name']);
         $this->assertArrayHasKey('distanceKm', $data['items'][0]);
         $this->assertEquals(0.0, $data['items'][0]['distanceKm']);
+    }
+
+    public function testGetZonesRejectsUnsupportedQueryValues(): void
+    {
+        $response = $this->request('GET', '/api/zones?city=turku');
+        $data = $this->decodeJson($response);
+
+        $this->assertSame(400, $response->getStatusCode());
+        $this->assertSame(['error' => 'Unsupported city. Use helsinki, espoo, or vantaa.'], $data);
+    }
+
+    public function testGetZonesRequiresCoordinatePairs(): void
+    {
+        $response = $this->request('GET', '/api/zones?lat=60.1670&sort=distance_asc');
+        $data = $this->decodeJson($response);
+
+        $this->assertSame(400, $response->getStatusCode());
+        $this->assertSame(['error' => 'lat and lng must be provided together.'], $data);
+    }
+
+    public function testGetZonesRejectsOversizedPageLimits(): void
+    {
+        $response = $this->request('GET', '/api/zones?limit=101');
+        $data = $this->decodeJson($response);
+
+        $this->assertSame(400, $response->getStatusCode());
+        $this->assertSame(['error' => 'Query parameter "limit" must be no greater than 100.'], $data);
+    }
+
+    public function testHealthEndpointReturnsStatusAndZoneCount(): void
+    {
+        $response = $this->request('GET', '/api/health');
+        $data = $this->decodeJson($response);
+
+        $this->assertSame(200, $response->getStatusCode());
+        $this->assertSame(['status' => 'ok', 'zones' => 12], $data);
     }
 
     public function testGetZoneByIdReturnsContractedDetailPayload(): void
