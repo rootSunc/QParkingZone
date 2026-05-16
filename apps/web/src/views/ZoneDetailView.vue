@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
+import type * as Leaflet from 'leaflet'
+import type { Map as LeafletMap } from 'leaflet'
 import { fetchZone, type ZoneDetail } from '../api/zones'
 import { useCurrentMinute } from '@/composables/useCurrentMinute'
 import { getCityLabel } from '@/config/cities'
@@ -20,10 +22,10 @@ const mapError = ref('')
 const mapElement = ref<HTMLElement | null>(null)
 const { selectedCity, selectedCityLabel } = useCitySelection(() => route.query)
 const now = useCurrentMinute()
-let map: any | null = null
+let map: LeafletMap | null = null
 let activeRequestId = 0
 let activeController: AbortController | null = null
-let leafletLoader: Promise<any> | null = null
+let leafletLoader: Promise<typeof Leaflet> | null = null
 
 const mapUrl = computed(() => {
   if (!zone.value) {
@@ -86,7 +88,11 @@ function isAbortError(error: unknown): boolean {
 }
 
 function loadLeaflet() {
-  leafletLoader ??= import('leaflet').then((module) => module.default)
+  leafletLoader ??= import('leaflet').then((module) => {
+    const moduleWithDefault = module as typeof module & { default?: typeof Leaflet }
+
+    return moduleWithDefault.default ?? module
+  })
 
   return leafletLoader
 }
