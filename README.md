@@ -152,6 +152,8 @@ Notes:
 - The frontend is built into static assets and served by `Nginx`
 - The backend stays private inside the Docker network
 - `SQLite` data is stored in a named Docker volume
+- Backend and frontend containers expose health checks for Compose orchestration
+- The frontend response includes baseline security headers and immutable asset caching
 
 ### HTTPS Deployment
 
@@ -341,11 +343,15 @@ npm run test:e2e
 You can also run common checks from the repository root:
 
 ```bash
+make ci
 make test
 make test-e2e
 make audit
 make build
 ```
+
+CI runs backend tests/audit, frontend lint/unit/build/E2E/audit, Compose validation,
+and Docker image builds on pushes and pull requests.
 
 ## 9. Possible Future Improvements
 
