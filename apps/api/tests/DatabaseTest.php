@@ -15,8 +15,10 @@ final class DatabaseTest extends TestCase
         try {
             $pdo = Database::sqliteFile($path, true);
             $count = (int) $pdo->query('SELECT COUNT(*) FROM zones')->fetchColumn();
+            $seedCount = (int) $pdo->query("SELECT COUNT(*) FROM zones WHERE source_provider = 'seed'")->fetchColumn();
 
             self::assertSame(12, $count);
+            self::assertSame(12, $seedCount);
         } finally {
             if (file_exists($path)) {
                 unlink($path);
@@ -151,8 +153,12 @@ final class DatabaseTest extends TestCase
             self::assertIsString($schema);
             self::assertStringContainsString('json_valid(amenities)', strtolower($schema));
             self::assertStringContainsString('city text not null', strtolower($schema));
+            self::assertStringContainsString('source_provider text not null', strtolower($schema));
+            self::assertStringContainsString('json_valid(source_payload)', strtolower($schema));
             self::assertSame(1, $count);
             self::assertSame('helsinki', $pdo->query('SELECT city FROM zones LIMIT 1')->fetchColumn());
+            self::assertSame('seed', $pdo->query('SELECT source_provider FROM zones LIMIT 1')->fetchColumn());
+            self::assertSame('{}', $pdo->query('SELECT source_payload FROM zones LIMIT 1')->fetchColumn());
         } finally {
             if (file_exists($path)) {
                 unlink($path);

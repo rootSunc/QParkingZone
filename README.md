@@ -118,6 +118,10 @@ cd apps/api
 php scripts/import-zones.php
 ```
 
+The importer stores source metadata for every OpenStreetMap row and uses deterministic
+defaults when OSM does not provide capacity, pricing, or opening-hour details. Re-running
+the importer upserts by source identity instead of creating duplicate zones.
+
 ### Option 2: Run with Docker
 
 ```bash
