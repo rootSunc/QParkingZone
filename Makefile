@@ -5,11 +5,11 @@ API_DIR := $(CURDIR)/apps/api
 WEB_DIR := $(CURDIR)/apps/web
 COMPOSER_RUN := docker run --rm --user "$$(id -u):$$(id -g)" -e COMPOSER_CACHE_DIR=/tmp/composer-cache -v "$(API_DIR):/app" -w /app $(COMPOSER_IMAGE)
 
-.PHONY: install ci test test-e2e audit build lint compose-config up down api-install api-test api-audit web-install web-lint web-test web-e2e web-build web-audit
+.PHONY: install ci test test-e2e audit build lint contract smoke compose-config up down api-install api-test api-audit web-install web-lint web-test web-e2e web-build web-audit web-api-types-check
 
 install: api-install web-install
 
-ci: lint test audit build compose-config
+ci: lint test audit contract build compose-config
 
 test: api-test web-test
 
@@ -20,6 +20,11 @@ audit: api-audit web-audit
 build: web-build
 
 lint: web-lint
+
+contract: web-api-types-check
+
+smoke:
+	./scripts/smoke-test.sh
 
 compose-config:
 	docker compose -f infra/docker/docker-compose.yml config --quiet
@@ -58,3 +63,6 @@ web-build:
 
 web-audit:
 	cd "$(WEB_DIR)" && npm audit
+
+web-api-types-check:
+	cd "$(WEB_DIR)" && npm run api-types:check

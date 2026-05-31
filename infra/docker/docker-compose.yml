@@ -3,16 +3,15 @@ services:
     build:
       context: ../../apps/api
       dockerfile: ../../infra/docker/backend.Dockerfile
-    container_name: parking-zones-backend
     ports:
-      - "8000:8000"
-    command: sh -lc "php scripts/init-db.php && php -S 0.0.0.0:8000 -t public"
+      - "8000:80"
+    command: sh -lc "php scripts/init-db.php && apache2-foreground"
     environment:
       APP_ENV: development
       APP_DEBUG: "true"
       PARKING_ZONES_AUTO_SEED: "true"
     healthcheck:
-      test: ["CMD-SHELL", "php -r 'exit(@file_get_contents(\"http://127.0.0.1:8000/api/health\") === false ? 1 : 0);'"]
+      test: ["CMD-SHELL", "php -r 'exit(@file_get_contents(\"http://127.0.0.1/api/health\") === false ? 1 : 0);'"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -21,7 +20,6 @@ services:
     build:
       context: ../../apps/web
       dockerfile: ../../infra/docker/frontend.Dockerfile
-    container_name: parking-zones-frontend
     ports:
       - "5173:80"
     depends_on:

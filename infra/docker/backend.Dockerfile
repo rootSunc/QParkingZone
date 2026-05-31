@@ -10,14 +10,24 @@ RUN composer install \
     --no-progress \
     --optimize-autoloader
 
-FROM php:8.3-cli
+FROM php:8.3-apache
 
-WORKDIR /app
+WORKDIR /var/www/html
 
 COPY . .
 COPY --from=vendor /app/vendor ./vendor
-RUN mkdir -p var \
-    && useradd --uid 10001 --create-home --shell /usr/sbin/nologin appuser \
-    && chown -R appuser:appuser /app
-
-USER appuser
+RUN a2enmod headers rewrite \
+    && { \
+        echo '<VirtualHost *:80>'; \
+        echo '    ServerName localhost'; \
+        echo '    DocumentRoot /var/www/html/public'; \
+        echo '    <Directory /var/www/html/public>'; \
+        echo '        Require all granted'; \
+        echo '        FallbackResource /index.php'; \
+        echo '    </Directory>'; \
+        echo '    ErrorLog /proc/self/fd/2'; \
+        echo '    CustomLog /proc/self/fd/1 combined'; \
+        echo '</VirtualHost>'; \
+    } > /etc/apache2/sites-available/000-default.conf \
+    && mkdir -p var \
+    && chown -R www-data:www-data /var/www/html

@@ -63,6 +63,9 @@ jobs:
       - name: Unit tests
         run: npm run test:run
 
+      - name: API type contract
+        run: npm run api-types:check
+
       - name: Build
         run: npm run build
 
@@ -87,3 +90,6 @@ jobs:
 
       - name: Build frontend image
         run: docker build -f infra/docker/frontend.Dockerfile apps/web
+
+      - name: Smoke test Docker stack
+        run: make smoke
