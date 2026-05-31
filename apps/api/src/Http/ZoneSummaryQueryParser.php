@@ -14,10 +14,7 @@ final class ZoneSummaryQueryParser
 
     public function parse(array $queryParams): ZoneSummaryQuery
     {
-        $city = $this->readNormalizedString($queryParams, 'city');
-        if ($city !== null && !in_array($city, self::ALLOWED_CITIES, true)) {
-            throw new InvalidQueryParameter('Unsupported city. Use helsinki, espoo, or vantaa.');
-        }
+        $city = $this->parseCityFilter($queryParams);
 
         $status = $this->readNormalizedString($queryParams, 'status');
         if ($status !== null && !in_array($status, self::ALLOWED_STATUSES, true)) {
@@ -55,6 +52,16 @@ final class ZoneSummaryQueryParser
             page: $this->readPositiveInteger($queryParams, 'page', 1),
             limit: $this->readPositiveInteger($queryParams, 'limit', 20, self::MAX_PAGE_SIZE)
         );
+    }
+
+    public function parseCityFilter(array $queryParams): ?string
+    {
+        $city = $this->readNormalizedString($queryParams, 'city');
+        if ($city !== null && !in_array($city, self::ALLOWED_CITIES, true)) {
+            throw new InvalidQueryParameter('Unsupported city. Use helsinki, espoo, or vantaa.');
+        }
+
+        return $city;
     }
 
     private function readNormalizedString(array $queryParams, string $name): ?string

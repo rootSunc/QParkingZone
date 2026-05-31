@@ -50,6 +50,7 @@ async function mountZoneCard() {
         hourlyRateEur: 4.5,
         latitude: 60.1685,
         longitude: 24.9318,
+        amenities: ['EV Charging', 'Indoor Parking'],
         openingHours: {
           weekdays: '06:00-23:30',
           weekends: '08:00-23:30',

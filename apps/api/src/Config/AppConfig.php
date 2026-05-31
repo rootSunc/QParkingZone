@@ -12,7 +12,8 @@ final class AppConfig
         public readonly bool $liveAvailabilityEnabled = false,
         public readonly string $parkkihubiBaseUrl = 'https://pubapi.parkkiopas.fi/public/v1',
         public readonly string $liipiBaseUrl = 'https://parking.fintraffic.fi/api/v1',
-        public readonly float $availabilityHttpTimeoutSeconds = 2.0
+        public readonly float $availabilityHttpTimeoutSeconds = 2.0,
+        public readonly bool $accessLogEnabled = true
     ) {
     }
 
@@ -28,6 +29,7 @@ final class AppConfig
             parkkihubiBaseUrl: self::stringEnv('PARKING_ZONES_PARKKIHUBI_BASE_URL', 'https://pubapi.parkkiopas.fi/public/v1'),
             liipiBaseUrl: self::stringEnv('PARKING_ZONES_LIIPI_BASE_URL', 'https://parking.fintraffic.fi/api/v1'),
             availabilityHttpTimeoutSeconds: self::floatEnv('PARKING_ZONES_AVAILABILITY_HTTP_TIMEOUT', 2.0),
+            accessLogEnabled: self::boolEnv('PARKING_ZONES_ACCESS_LOG', true),
         );
     }
 

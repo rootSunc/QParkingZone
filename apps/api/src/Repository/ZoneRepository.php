@@ -66,6 +66,18 @@ final class ZoneRepository
         return (int) $this->pdo->query('SELECT COUNT(*) FROM zones')->fetchColumn();
     }
 
+    public function fetchFacets(?string $city): array
+    {
+        [$whereClause, $params] = $this->buildFacetFilters($city);
+
+        return [
+            'city' => $city,
+            'types' => $this->fetchGroupedCounts('z.type', $whereClause, $params),
+            'statuses' => $this->fetchGroupedCounts('z.status', $whereClause, $params),
+            'amenities' => $this->fetchAmenityCounts($whereClause, $params),
+        ];
+    }
+
     public function fetchDetailById(int $id): ?array
     {
         $stmt = $this->pdo->prepare("
@@ -150,6 +162,48 @@ final class ZoneRepository
         $stmt->execute();
 
         return (int) $stmt->fetchColumn();
+    }
+
+    private function fetchGroupedCounts(string $expression, string $whereClause, array $params): array
+    {
+        $stmt = $this->pdo->prepare("
+            SELECT {$expression} AS value, COUNT(*) AS count
+            FROM zones z
+            {$whereClause}
+            GROUP BY {$expression}
+            ORDER BY value ASC
+        ");
+        $this->bindQueryParams($stmt, $params);
+        $stmt->execute();
+
+        return array_map(
+            fn (array $row): array => [
+                'value' => (string) $row['value'],
+                'count' => (int) $row['count'],
+            ],
+            $stmt->fetchAll()
+        );
+    }
+
+    private function fetchAmenityCounts(string $whereClause, array $params): array
+    {
+        $stmt = $this->pdo->prepare("
+            SELECT json_each.value AS value, COUNT(*) AS count
+            FROM zones z, json_each(z.amenities)
+            {$whereClause}
+            GROUP BY json_each.value
+            ORDER BY value ASC
+        ");
+        $this->bindQueryParams($stmt, $params);
+        $stmt->execute();
+
+        return array_map(
+            fn (array $row): array => [
+                'value' => (string) $row['value'],
+                'count' => (int) $row['count'],
+            ],
+            $stmt->fetchAll()
+        );
     }
 
     private function bindQueryParams(\PDOStatement $stmt, array $params): void
@@ -267,6 +321,18 @@ final class ZoneRepository
         return [
             $clauses === [] ? '' : 'WHERE ' . implode(' AND ', $clauses),
             $params,
+        ];
+    }
+
+    private function buildFacetFilters(?string $city): array
+    {
+        if ($city === null) {
+            return ['', []];
+        }
+
+        return [
+            'WHERE z.city = :city',
+            ['city' => $city],
         ];
     }
 

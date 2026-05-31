@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { ref } from 'vue'
 import ZoneDetailView from '@/views/ZoneDetailView.vue'
-import { fetchZone } from '@/api/zones'
+import { fetchZone, type ZoneDetail } from '@/api/zones'
 
 const mapRemove = vi.fn()
 const mapInvalidateSize = vi.fn()
@@ -117,20 +117,7 @@ describe('ZoneDetailView', () => {
   })
 
   it('shows loading first and then renders zone details', async () => {
-    const pending = deferred<{
-      id: number
-      name: string
-      city: 'helsinki' | 'espoo' | 'vantaa'
-      type: string
-      status: string
-      description: string
-      maxCapacity: number
-      hourlyRateEur: number
-      latitude: number
-      longitude: number
-      amenities: string[]
-      openingHours: { weekdays: string; weekends: string }
-    }>()
+    const pending = deferred<ZoneDetail>()
     fetchZoneMock.mockReturnValueOnce(pending.promise)
 
     const { wrapper } = await mountView()

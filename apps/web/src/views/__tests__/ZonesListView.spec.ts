@@ -1,11 +1,12 @@
 import { enableAutoUnmount, mount } from '@vue/test-utils'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { ref } from 'vue'
 import ZonesListView from '@/views/ZonesListView.vue'
-import { fetchZones, type ZonesPage } from '@/api/zones'
+import { fetchZoneFacets, fetchZones, type ZoneFacets, type ZonesPage } from '@/api/zones'
 
 vi.mock('@/api/zones', () => ({
+  fetchZoneFacets: vi.fn(),
   fetchZones: vi.fn(),
 }))
 
@@ -14,6 +15,7 @@ vi.mock('@/composables/useCurrentMinute', () => ({
 }))
 
 const fetchZonesMock = vi.mocked(fetchZones)
+const fetchZoneFacetsMock = vi.mocked(fetchZoneFacets)
 
 enableAutoUnmount(afterEach)
 
@@ -42,6 +44,25 @@ function createZonesPage(items: ZonesPage['items'], overrides: Partial<ZonesPage
   }
 }
 
+function createZoneFacets(overrides: Partial<ZoneFacets> = {}): ZoneFacets {
+  return {
+    city: 'helsinki',
+    types: [
+      { value: 'commercial', count: 3 },
+      { value: 'street', count: 2 },
+    ],
+    statuses: [
+      { value: 'active', count: 4 },
+      { value: 'inactive', count: 1 },
+    ],
+    amenities: [
+      { value: 'EV Charging', count: 2 },
+      { value: 'Indoor Parking', count: 2 },
+    ],
+    ...overrides,
+  }
+}
+
 function createZoneSummary(overrides: Partial<ZonesPage['items'][number]> = {}): ZonesPage['items'][number] {
   return {
     id: 1,
@@ -52,6 +73,7 @@ function createZoneSummary(overrides: Partial<ZonesPage['items'][number]> = {}):
     hourlyRateEur: 4.5,
     latitude: 60.1685,
     longitude: 24.9318,
+    amenities: ['EV Charging', 'Indoor Parking'],
     openingHours: {
       weekdays: '06:00-23:30',
       weekends: '08:00-23:30',
@@ -96,6 +118,10 @@ async function mountView(initialQuery: Record<string, string> = { city: 'helsink
 }
 
 describe('ZonesListView', () => {
+  beforeEach(() => {
+    fetchZoneFacetsMock.mockResolvedValue(createZoneFacets())
+  })
+
   afterEach(() => {
     vi.resetAllMocks()
   })
@@ -123,6 +149,7 @@ describe('ZonesListView', () => {
       }),
       expect.any(AbortSignal),
     )
+    expect(fetchZoneFacetsMock).toHaveBeenCalledWith('helsinki', expect.any(AbortSignal))
 
     pending.resolve(
       createZonesPage([
@@ -209,6 +236,34 @@ describe('ZonesListView', () => {
     )
     expect(wrapper.text()).toContain('Active filters')
     expect(wrapper.text()).toContain('commercial ×')
+  })
+
+  it('uses facet metadata for amenity filters', async () => {
+    fetchZonesMock
+      .mockResolvedValueOnce(createZonesPage([createZoneSummary()]))
+      .mockResolvedValueOnce(createZonesPage([createZoneSummary()]))
+
+    const { router, wrapper } = await mountView()
+
+    await flushPromises()
+    const amenityChip = wrapper
+      .findAll('button.type-hint-chip')
+      .find((button) => button.text() === 'EV Charging')
+
+    expect(amenityChip).toBeDefined()
+    await amenityChip!.trigger('click')
+    await flushPromises()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('EV Charging')
+    expect(router.currentRoute.value.query.amenities).toBe('EV Charging')
+    expect(fetchZonesMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        amenities: ['EV Charging'],
+        page: 1,
+      }),
+      expect.any(AbortSignal),
+    )
   })
 
   it('toggles the open-now filter through the route query', async () => {

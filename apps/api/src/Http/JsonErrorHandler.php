@@ -28,6 +28,11 @@ final class JsonErrorHandler
         $payload = [
             'error' => $this->resolveMessage($exception, $displayErrorDetails, $status),
         ];
+        $requestId = RequestIdMiddleware::requestId($request);
+
+        if ($requestId !== null) {
+            $payload['requestId'] = $requestId;
+        }
 
         if ($displayErrorDetails) {
             $payload['exception'] = $exception::class;
