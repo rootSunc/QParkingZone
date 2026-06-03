@@ -183,7 +183,12 @@ php scripts/import-zones.php
 
 The importer stores source metadata and upserts by source identity, so repeated
 imports refresh existing rows instead of creating duplicates. Live occupancy
-provider integrations are not implemented in this demo.
+provider integrations are not implemented in this demo. By default, the importer
+tries the main Overpass API and then a secondary public instance. Set
+`PARKING_ZONES_OVERPASS_URLS` to a comma-separated endpoint list to override
+that failover order. If auto-seeding is enabled and an empty database cannot be
+filled from Overpass, the seed rows remain in place instead of leaving the API
+with zero zones.
 
 ## API Snapshot
 
